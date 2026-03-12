@@ -1,8 +1,8 @@
-# Workspace
+# Healthy Home OS
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+A lightweight business operating system for Healthy Home, a local exterior cleaning company (house wash, driveway cleaning, bundles). Tracks sales, fulfillment, reviews, content, and generates daily business reports.
 
 ## Stack
 
@@ -14,83 +14,90 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
+- **Frontend**: React + Vite (Recharts, TanStack Query, Wouter)
 - **Build**: esbuild (CJS bundle)
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
+├── artifacts/
+│   ├── api-server/         # Express API server — all business logic
+│   └── dashboard/          # React frontend — owner dashboard UI
+├── lib/
+│   ├── api-spec/           # OpenAPI spec (openapi.yaml) + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
 ```
 
-## TypeScript & Composite Projects
+## Database Schema (lib/db/src/schema/)
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+- **canvassing_sessions** — D2D session records per canvasser per day
+- **leads** — Lead-level records with status flow (new→quoted→follow_up→sold→lost)
+- **customers** — Customer master record
+- **jobs** — Job scheduling and fulfillment (scheduled→completed/rescheduled/canceled)
+- **review_workflows** — Post-job satisfaction routing (4-5 → Google review, 1-3 → internal feedback + issue flag)
+- **job_content** — Before/after photos, video capture, content-ready flag (auto-created with each job)
+- **daily_reports** — Persisted daily report with full Robin-payload JSON
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## API Routes (artifacts/api-server/src/routes/)
 
-## Root Scripts
+| Module | Routes |
+|---|---|
+| Health | GET /api/healthz |
+| Canvassing | GET/POST /api/canvassing/sessions, GET/PUT /api/canvassing/sessions/:id |
+| Leads | GET/POST /api/canvassing/leads, GET/PUT /api/canvassing/leads/:id |
+| Customers | GET/POST /api/customers, GET/PUT /api/customers/:id |
+| Jobs | GET/POST /api/jobs, GET/PUT /api/jobs/:id, POST /api/jobs/:id/complete |
+| Reviews | GET /api/reviews, POST /api/reviews/:id/satisfaction, POST /api/reviews/:id/resolve-issue, POST /api/reviews/campaign/batch |
+| Content | GET/PUT /api/content/:jobId |
+| Dashboard | GET /api/dashboard/today, GET /api/dashboard/weekly |
+| Reports | GET /api/reports/daily, POST /api/reports/daily/generate, GET /api/reports/daily/:date/export |
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## Key Business Logic
 
-## Packages
+- **Job completion** (POST /api/jobs/:id/complete): marks job done, creates review workflow, sets satisfactionSentAt
+- **Satisfaction routing**: score ≥ 4 → status=review_link_sent, score < 4 → status=feedback_requested + isIssueFlagged=true
+- **Daily report generation**: aggregates all canvassing + job + review data for date, detects anomalies, produces Robin-ready JSON payload, supports webhook delivery
+- **Daily KPI targets**: 20 good conversations, 4 closes, $1,200 revenue, 1 bundle per day
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## Daily Report / Robin Payload
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+POST /api/reports/daily/generate with `{"date":"YYYY-MM-DD","webhookUrl":"optional"}`
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+Payload structure:
+```json
+{
+  "businessName": "Healthy Home",
+  "reportDate": "YYYY-MM-DD",
+  "salesMetrics": { "doorsKnocked", "goodConversations", "quotesGiven", "closes", "closeRate", "revenueSold", "averageTicket", "bundlesSold" },
+  "fulfillmentMetrics": { "jobsCompleted", "cashCollected", "tomorrowScheduled" },
+  "reviewMetrics": { "reviewRequestsSent", "positiveSatisfaction", "negativeSatisfaction", "reviewsReceived" },
+  "teamMetrics": { "topCanvasser", "topTechnician" },
+  "openIssues": 0,
+  "nextDaySchedule": [...],
+  "notes": "Anomaly notes..."
+}
+```
 
-### `lib/db` (`@workspace/db`)
+To auto-send to Robin: include `webhookUrl` in the generate request. The system will POST the payload to that URL.
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+## Configuring Automated Daily Reports
 
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
+To automate end-of-day report delivery:
+1. Set up a cron job or scheduled task to call: `POST /api/reports/daily/generate` with `{"date":"YYYY-MM-DD","webhookUrl":"https://your-webhook.com/robin"}`
+2. The webhook receives the full Robin payload as JSON
+3. Reports are also saved to the database for dashboard review
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+## Running Codegen (after OpenAPI spec changes)
 
-### `lib/api-spec` (`@workspace/api-spec`)
+```
+pnpm --filter @workspace/api-spec run codegen
+```
 
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
+## DB Migrations
 
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+```
+pnpm --filter @workspace/db run push
+```

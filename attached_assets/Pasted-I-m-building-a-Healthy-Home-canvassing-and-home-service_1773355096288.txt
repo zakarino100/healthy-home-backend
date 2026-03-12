@@ -1,0 +1,301 @@
+I’m building a Healthy Home canvassing and home services operating system.
+Healthy Home is a local exterior cleaning business focused on:
+
+House Wash
+Driveway Cleaning
+Bundle = House Wash + Driveway Cleaning
+I already have a Healthy Home canvassing app started.
+Your job is to help me extend and organize the backend so this becomes a lightweight business operating system for sales, fulfillment, reviews, and daily reporting.
+
+Core business context
+Business name: Healthy Home
+Industry: home services / exterior cleaning / softwashing
+Primary sales channel right now: door-to-door sales
+Core objective: create a backend that tracks field activity, booked jobs, fulfillment, reviews, and customer satisfaction
+It must also generate an automatic daily owner report and send that report to my assistant Robin at the end of every day
+Main goals
+Build or extend the backend so it can:
+
+Track canvassing / D2D activity
+Track leads, quotes, bookings, and jobs
+Track fulfillment and technician assignment
+Track customer satisfaction and review workflow
+Track content capture from jobs
+Provide an owner dashboard with daily and weekly metrics
+Automatically generate and send an end-of-day business summary
+Be structured so I can later plug in ads, additional salespeople, and more automation
+Important constraints
+Keep it simple, practical, and operational
+Do not over-engineer
+Prioritize working backend structure over polish
+Make the system easy to extend later
+Assume I may already have some partial app structure started, so inspect the current code first and extend it cleanly rather than rebuilding blindly
+If parts of the current app already exist, reuse them where reasonable
+Favor clarity in schema and workflows
+Required backend modules
+1. Canvassing / D2D tracking
+Create or extend tables/models/APIs for field sales tracking.
+
+Each canvassing activity record should support:
+
+user / canvasser
+date
+neighborhood
+route / turf
+doors knocked
+people reached
+good conversations
+quotes given
+closes
+revenue sold
+average ticket
+bundle count
+driveway add-on count
+notes
+Also support lead-level records:
+
+lead id
+customer name
+address
+phone
+email
+lead source
+canvasser
+quote amount
+service interest
+status
+new
+quoted
+follow-up
+sold
+lost
+follow-up date
+notes
+2. Customer and job management
+Create customer and job models.
+
+Customer fields:
+
+customer_id
+first_name
+last_name
+phone
+email
+address
+city
+state
+zip
+notes
+opt_out flag
+Job fields:
+
+job_id
+customer_id
+service_type
+package_type
+quoted_price
+sold_price
+status
+scheduled
+completed
+rescheduled
+canceled
+scheduled_at
+completed_at
+technician_assigned
+payment_status
+payment_amount_collected
+notes
+3. Review and satisfaction workflow
+This is important.
+
+Build a post-job satisfaction and review workflow.
+
+When a job is marked completed:
+
+the customer should be placed into a review queue
+a satisfaction request should be sent first
+if satisfaction score is 4 or 5, send Google review request link
+if satisfaction score is 1, 2, or 3, send customer to an internal feedback form instead
+unhappy customers should create an internal issue flag for follow-up
+Track:
+
+review workflow status
+satisfaction score
+satisfaction response timestamp
+review request sent timestamp
+review reminder sent timestamp
+feedback form sent timestamp
+feedback received timestamp
+issue flagged boolean
+internal issue notes
+Also support old customer review campaigns:
+
+mark old customers as eligible for review campaign
+send batch satisfaction requests to previously serviced customers
+route them the same way based on satisfaction score
+4. Content capture support
+Every completed job should be able to store:
+
+before photos
+after photos
+short video captured yes/no
+content-ready flag
+review screenshot flag
+This is so we can later use jobs as a content engine.
+
+5. Dashboard and reporting
+Build backend endpoints/services to support these dashboard sections:
+
+Owner Dashboard
+Show:
+
+doors knocked today
+good conversations today
+quotes today
+closes today
+revenue sold today
+average ticket today
+bundle count today
+jobs completed today
+cash collected today
+review requests sent today
+reviews received today
+unresolved customer issues
+tomorrow’s scheduled jobs
+Weekly Dashboard
+Show:
+
+total sold this week
+total collected this week
+total completed this week
+close rate this week
+average ticket this week
+bundle rate this week
+canvasser leaderboard
+tech completion stats
+review growth
+unresolved issues count
+6. Daily owner report automation
+At the end of every day, automatically generate a structured summary.
+
+The report should include:
+
+date
+doors knocked
+good conversations
+quotes
+closes
+close rate
+revenue sold
+average ticket
+bundles sold
+jobs completed
+cash collected
+review requests sent
+positive satisfaction responses
+negative satisfaction responses
+reviews received
+top canvasser
+top technician
+open issues
+tomorrow’s scheduled jobs
+short summary of anomalies or things that need attention
+The system should support sending this summary automatically to my assistant Robin.
+
+Design this in a modular way so the report can be:
+
+saved to the database
+exported as JSON
+optionally posted to a webhook endpoint later
+For now, implement it in a way where we can easily plug in a webhook, API call, or outbound message integration.
+
+7. Robin analysis integration
+Create a dedicated daily summary payload format for analysis.
+
+Example output structure:
+
+business_name
+report_date
+sales_metrics
+fulfillment_metrics
+review_metrics
+team_metrics
+open_issues
+next_day_schedule
+notes
+This payload should be machine-readable and consistent so it can be sent daily to Robin for business analysis.
+
+Product and workflow requirements
+Daily KPI targets to support
+We want the app to help track these operational goals:
+
+20 good conversations per day
+4 closes per day
+at least $1,200 revenue sold per day
+1 or more bundle sales per day
+100% of completed jobs get satisfaction workflow triggered
+100% of completed jobs have before/after photo tracking
+Core statuses and flows
+Lead flow:
+
+new lead
+quoted
+follow-up
+sold
+lost
+Job flow:
+
+scheduled
+completed
+rescheduled
+canceled
+Review flow:
+
+pending
+satisfaction_sent
+satisfaction_responded
+review_link_sent
+review_completed
+feedback_requested
+issue_flagged
+Technical implementation guidance
+Please do the following:
+
+Inspect the current app/codebase first
+Identify what already exists
+Extend the current architecture rather than replacing it unnecessarily
+Propose a clean schema for any missing backend pieces
+Create migrations/models/endpoints/services needed
+Keep naming consistent and readable
+Add comments where useful
+If there is a frontend admin/dashboard already, wire it up where appropriate
+If there is no frontend yet for some of these backend pieces, still build the backend cleanly and stub the necessary endpoints
+Output expectations
+I want you to:
+
+review the current codebase
+explain what backend structure already exists
+list what needs to be added
+implement the missing pieces
+create the daily summary/report system
+explain how to configure the daily auto-send/report delivery
+provide example payloads and example test data
+Nice-to-have
+If practical, also include:
+
+a review campaign batch sender for old customers
+simple issue management for unhappy customers
+a way to filter metrics by date range, canvasser, and neighborhood
+a CSV export option for reports
+Important design principle
+This app is not just a canvassing tracker.
+It is becoming a lightweight operating system for:
+
+sales
+fulfillment
+reviews
+content capture
+daily business analysis
+Build it that way.
+
