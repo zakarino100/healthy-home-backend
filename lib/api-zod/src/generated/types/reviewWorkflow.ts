@@ -3,8 +3,10 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { ReviewWorkflowDeliveryChannel } from "./reviewWorkflowDeliveryChannel";
+import type { ReviewWorkflowDeliveryStatus } from "./reviewWorkflowDeliveryStatus";
 
 export interface ReviewWorkflow {
   id: number;
@@ -22,6 +24,9 @@ export interface ReviewWorkflow {
   isIssueFlagged: boolean;
   internalIssueNotes?: string | null;
   isOldCustomerCampaign: boolean;
+  deliveryChannel: ReviewWorkflowDeliveryChannel;
+  deliveryStatus: ReviewWorkflowDeliveryStatus;
+  deliveryLog?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from "zod";
 
@@ -12,6 +12,93 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+});
+
+/**
+ * @summary List team members
+ */
+export const ListUsersQueryParams = zod.object({
+  role: zod.enum(["admin", "canvasser", "technician"]).optional(),
+  active: zod.coerce.boolean().optional(),
+});
+
+export const ListUsersResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+export const ListUsersResponse = zod.array(ListUsersResponseItem);
+
+/**
+ * @summary Create a team member
+ */
+export const CreateUserBody = zod.object({
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean().optional(),
+});
+
+/**
+ * @summary Get a team member
+ */
+export const GetUserParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetUserResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Update a team member
+ */
+export const UpdateUserParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateUserBody = zod.object({
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateUserResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Deactivate a team member
+ */
+export const DeleteUserParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteUserResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  email: zod.string().nullish(),
+  role: zod.enum(["admin", "canvasser", "technician"]),
+  active: zod.boolean(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
 });
 
 /**
@@ -140,22 +227,38 @@ export const UpdateCanvassingSessionResponse = zod.object({
 });
 
 /**
+ * @summary Delete a canvassing session
+ */
+export const DeleteCanvassingSessionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteCanvassingSessionResponse = zod.object({
+  error: zod.string(),
+});
+
+/**
  * @summary List leads
  */
 export const ListLeadsQueryParams = zod.object({
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]).optional(),
   canvasser: zod.coerce.string().optional(),
+  source: zod.coerce.string().optional(),
   startDate: zod.coerce.string().optional(),
   endDate: zod.coerce.string().optional(),
 });
 
 export const ListLeadsResponseItem = zod.object({
   id: zod.number(),
-  customerName: zod.string(),
-  address: zod.string().nullish(),
+  firstName: zod.string(),
+  lastName: zod.string(),
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
-  leadSource: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zip: zod.string().nullish(),
+  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
   canvasser: zod.string().nullish(),
   quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
@@ -163,6 +266,7 @@ export const ListLeadsResponseItem = zod.object({
   followUpDate: zod.string().nullish(),
   notes: zod.string().nullish(),
   sessionId: zod.number().nullish(),
+  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -172,11 +276,15 @@ export const ListLeadsResponse = zod.array(ListLeadsResponseItem);
  * @summary Create a lead
  */
 export const CreateLeadBody = zod.object({
-  customerName: zod.string(),
-  address: zod.string().nullish(),
+  firstName: zod.string(),
+  lastName: zod.string().optional(),
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
-  leadSource: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zip: zod.string().nullish(),
+  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
   canvasser: zod.string().nullish(),
   quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
@@ -195,11 +303,15 @@ export const GetLeadParams = zod.object({
 
 export const GetLeadResponse = zod.object({
   id: zod.number(),
-  customerName: zod.string(),
-  address: zod.string().nullish(),
+  firstName: zod.string(),
+  lastName: zod.string(),
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
-  leadSource: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zip: zod.string().nullish(),
+  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
   canvasser: zod.string().nullish(),
   quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
@@ -207,6 +319,7 @@ export const GetLeadResponse = zod.object({
   followUpDate: zod.string().nullish(),
   notes: zod.string().nullish(),
   sessionId: zod.number().nullish(),
+  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -219,11 +332,15 @@ export const UpdateLeadParams = zod.object({
 });
 
 export const UpdateLeadBody = zod.object({
-  customerName: zod.string(),
-  address: zod.string().nullish(),
+  firstName: zod.string(),
+  lastName: zod.string().optional(),
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
-  leadSource: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zip: zod.string().nullish(),
+  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
   canvasser: zod.string().nullish(),
   quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
@@ -235,11 +352,15 @@ export const UpdateLeadBody = zod.object({
 
 export const UpdateLeadResponse = zod.object({
   id: zod.number(),
-  customerName: zod.string(),
-  address: zod.string().nullish(),
+  firstName: zod.string(),
+  lastName: zod.string(),
   phone: zod.string().nullish(),
   email: zod.string().nullish(),
-  leadSource: zod.string().nullish(),
+  address: zod.string().nullish(),
+  city: zod.string().nullish(),
+  state: zod.string().nullish(),
+  zip: zod.string().nullish(),
+  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
   canvasser: zod.string().nullish(),
   quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
@@ -247,8 +368,27 @@ export const UpdateLeadResponse = zod.object({
   followUpDate: zod.string().nullish(),
   notes: zod.string().nullish(),
   sessionId: zod.number().nullish(),
+  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
+});
+
+/**
+ * @summary Delete a lead
+ */
+export const DeleteLeadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteLeadResponse = zod.object({
+  error: zod.string(),
+});
+
+/**
+ * @summary Convert a sold lead into a customer
+ */
+export const ConvertLeadToCustomerParams = zod.object({
+  id: zod.coerce.number(),
 });
 
 /**
@@ -528,6 +668,9 @@ export const CompleteJobResponse = zod.object({
     isIssueFlagged: zod.boolean(),
     internalIssueNotes: zod.string().nullish(),
     isOldCustomerCampaign: zod.boolean(),
+    deliveryChannel: zod.enum(["sms", "email", "manual", "unknown"]),
+    deliveryStatus: zod.enum(["pending", "sent", "failed", "skipped"]),
+    deliveryLog: zod.string().nullish(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   }),
@@ -557,6 +700,9 @@ export const ListReviewWorkflowsResponseItem = zod.object({
   isIssueFlagged: zod.boolean(),
   internalIssueNotes: zod.string().nullish(),
   isOldCustomerCampaign: zod.boolean(),
+  deliveryChannel: zod.enum(["sms", "email", "manual", "unknown"]),
+  deliveryStatus: zod.enum(["pending", "sent", "failed", "skipped"]),
+  deliveryLog: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -593,6 +739,9 @@ export const RecordSatisfactionResponse = zod.object({
   isIssueFlagged: zod.boolean(),
   internalIssueNotes: zod.string().nullish(),
   isOldCustomerCampaign: zod.boolean(),
+  deliveryChannel: zod.enum(["sms", "email", "manual", "unknown"]),
+  deliveryStatus: zod.enum(["pending", "sent", "failed", "skipped"]),
+  deliveryLog: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -624,6 +773,9 @@ export const ResolveIssueResponse = zod.object({
   isIssueFlagged: zod.boolean(),
   internalIssueNotes: zod.string().nullish(),
   isOldCustomerCampaign: zod.boolean(),
+  deliveryChannel: zod.enum(["sms", "email", "manual", "unknown"]),
+  deliveryStatus: zod.enum(["pending", "sent", "failed", "skipped"]),
+  deliveryLog: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -799,90 +951,160 @@ export const GenerateDailyReportBody = zod.object({
 });
 
 export const GenerateDailyReportResponse = zod.object({
-  businessName: zod.string(),
-  reportDate: zod.string(),
-  salesMetrics: zod.object({
-    doorsKnocked: zod.number(),
-    goodConversations: zod.number(),
-    quotesGiven: zod.number(),
+  business_name: zod.string(),
+  report_date: zod.string(),
+  sales_metrics: zod.object({
+    doors_knocked: zod.number(),
+    good_conversations: zod.number(),
+    quotes_given: zod.number(),
     closes: zod.number(),
-    closeRate: zod.number(),
-    revenueSold: zod.number(),
-    averageTicket: zod.number(),
-    bundlesSold: zod.number(),
+    close_rate_pct: zod.number(),
+    revenue_sold: zod.number(),
+    average_ticket: zod.number(),
+    bundles_sold: zod.number(),
   }),
-  fulfillmentMetrics: zod.object({
-    jobsCompleted: zod.number(),
-    cashCollected: zod.number(),
-    tomorrowScheduled: zod.number(),
+  fulfillment_metrics: zod.object({
+    jobs_completed: zod.number(),
+    cash_collected: zod.number(),
+    jobs_scheduled_tomorrow: zod.number(),
   }),
-  reviewMetrics: zod.object({
-    reviewRequestsSent: zod.number(),
-    positiveSatisfaction: zod.number(),
-    negativeSatisfaction: zod.number(),
-    reviewsReceived: zod.number(),
+  review_metrics: zod.object({
+    satisfaction_requests_sent: zod.number(),
+    positive_responses: zod.number(),
+    negative_responses: zod.number(),
+    reviews_received: zod.number(),
   }),
-  teamMetrics: zod.object({
-    topCanvasser: zod.string().nullable(),
-    topTechnician: zod.string().nullable(),
+  team_metrics: zod.object({
+    top_canvasser: zod.string().nullable(),
+    top_technician: zod.string().nullable(),
+    canvasser_count_active_today: zod.number(),
   }),
-  openIssues: zod.number(),
-  nextDaySchedule: zod.array(
+  open_issues: zod.object({
+    count: zod.number(),
+    details: zod.array(
+      zod.object({
+        workflowId: zod.number(),
+        customerId: zod.number(),
+        jobId: zod.number(),
+        notes: zod.string().nullish(),
+      }),
+    ),
+  }),
+  next_day_schedule: zod.array(
     zod.object({
-      jobId: zod.number(),
-      customerName: zod.string(),
-      serviceType: zod.string(),
-      scheduledAt: zod.string(),
+      job_id: zod.number(),
+      customer_name: zod.string(),
+      service_type: zod.string(),
+      scheduled_at: zod.string(),
       technician: zod.string().nullish(),
     }),
   ),
-  notes: zod.string().nullish(),
+  daily_targets: zod.object({
+    good_conversations: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    closes: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    revenue_sold: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    bundles: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+  }),
+  anomaly_notes: zod.string().nullish(),
 });
 
 /**
- * @summary Export daily report as JSON
+ * @summary Export daily report as JSON or CSV
  */
 export const ExportDailyReportParams = zod.object({
   date: zod.coerce.string(),
 });
 
+export const ExportDailyReportQueryParams = zod.object({
+  format: zod.enum(["json", "csv"]).optional(),
+});
+
 export const ExportDailyReportResponse = zod.object({
-  businessName: zod.string(),
-  reportDate: zod.string(),
-  salesMetrics: zod.object({
-    doorsKnocked: zod.number(),
-    goodConversations: zod.number(),
-    quotesGiven: zod.number(),
+  business_name: zod.string(),
+  report_date: zod.string(),
+  sales_metrics: zod.object({
+    doors_knocked: zod.number(),
+    good_conversations: zod.number(),
+    quotes_given: zod.number(),
     closes: zod.number(),
-    closeRate: zod.number(),
-    revenueSold: zod.number(),
-    averageTicket: zod.number(),
-    bundlesSold: zod.number(),
+    close_rate_pct: zod.number(),
+    revenue_sold: zod.number(),
+    average_ticket: zod.number(),
+    bundles_sold: zod.number(),
   }),
-  fulfillmentMetrics: zod.object({
-    jobsCompleted: zod.number(),
-    cashCollected: zod.number(),
-    tomorrowScheduled: zod.number(),
+  fulfillment_metrics: zod.object({
+    jobs_completed: zod.number(),
+    cash_collected: zod.number(),
+    jobs_scheduled_tomorrow: zod.number(),
   }),
-  reviewMetrics: zod.object({
-    reviewRequestsSent: zod.number(),
-    positiveSatisfaction: zod.number(),
-    negativeSatisfaction: zod.number(),
-    reviewsReceived: zod.number(),
+  review_metrics: zod.object({
+    satisfaction_requests_sent: zod.number(),
+    positive_responses: zod.number(),
+    negative_responses: zod.number(),
+    reviews_received: zod.number(),
   }),
-  teamMetrics: zod.object({
-    topCanvasser: zod.string().nullable(),
-    topTechnician: zod.string().nullable(),
+  team_metrics: zod.object({
+    top_canvasser: zod.string().nullable(),
+    top_technician: zod.string().nullable(),
+    canvasser_count_active_today: zod.number(),
   }),
-  openIssues: zod.number(),
-  nextDaySchedule: zod.array(
+  open_issues: zod.object({
+    count: zod.number(),
+    details: zod.array(
+      zod.object({
+        workflowId: zod.number(),
+        customerId: zod.number(),
+        jobId: zod.number(),
+        notes: zod.string().nullish(),
+      }),
+    ),
+  }),
+  next_day_schedule: zod.array(
     zod.object({
-      jobId: zod.number(),
-      customerName: zod.string(),
-      serviceType: zod.string(),
-      scheduledAt: zod.string(),
+      job_id: zod.number(),
+      customer_name: zod.string(),
+      service_type: zod.string(),
+      scheduled_at: zod.string(),
       technician: zod.string().nullish(),
     }),
   ),
-  notes: zod.string().nullish(),
+  daily_targets: zod.object({
+    good_conversations: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    closes: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    revenue_sold: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+    bundles: zod.object({
+      goal: zod.number(),
+      actual: zod.number(),
+      met: zod.boolean(),
+    }),
+  }),
+  anomaly_notes: zod.string().nullish(),
 });

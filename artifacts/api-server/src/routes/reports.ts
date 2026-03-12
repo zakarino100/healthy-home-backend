@@ -13,14 +13,20 @@ const router: IRouter = Router();
 
 const BUSINESS_NAME = "Healthy Home";
 
+const KPI_GOALS = {
+  good_conversations: 20,
+  closes: 4,
+  revenue_sold: 1200,
+  bundles: 1,
+};
+
 function toLocalDateString(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
-async function buildDailyPayload(date: string) {
+export async function buildRobinPayload(date: string) {
   const dayStart = new Date(date);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
-  const nextDay = toLocalDateString(dayEnd);
   const nextDayEnd = new Date(dayEnd.getTime() + 86400000);
 
   // Canvassing totals
@@ -32,6 +38,7 @@ async function buildDailyPayload(date: string) {
       closes: sql<number>`coalesce(sum(${canvassingSessionsTable.closes}), 0)`.mapWith(Number),
       revenueSold: sql<number>`coalesce(sum(${canvassingSessionsTable.revenueSold}::numeric), 0)`.mapWith(Number),
       bundlesSold: sql<number>`coalesce(sum(${canvassingSessionsTable.bundleCount}), 0)`.mapWith(Number),
+      canvasserCount: sql<number>`coalesce(count(distinct ${canvassingSessionsTable.canvasser}), 0)`.mapWith(Number),
     })
     .from(canvassingSessionsTable)
     .where(eq(canvassingSessionsTable.sessionDate, date));
@@ -39,7 +46,9 @@ async function buildDailyPayload(date: string) {
   const closes = canvasTotals.closes ?? 0;
   const quotesGiven = canvasTotals.quotesGiven ?? 0;
   const revenueSold = canvasTotals.revenueSold ?? 0;
-  const closeRate = quotesGiven > 0 ? Math.round((closes / quotesGiven) * 1000) / 10 : 0;
+  const goodConversations = canvasTotals.goodConversations ?? 0;
+  const bundlesSold = canvasTotals.bundlesSold ?? 0;
+  const closeRatePct = quotesGiven > 0 ? Math.round((closes / quotesGiven) * 1000) / 10 : 0;
   const averageTicket = closes > 0 ? Math.round((revenueSold / closes) * 100) / 100 : 0;
 
   // Job totals for day
@@ -91,9 +100,14 @@ async function buildDailyPayload(date: string) {
       lte(reviewWorkflowsTable.reviewCompletedAt, dayEnd),
     ));
 
-  // Open issues
-  const [openIssues] = await db
-    .select({ count: sql<number>`coalesce(count(*), 0)`.mapWith(Number) })
+  // Open issues with details
+  const openIssueRecords = await db
+    .select({
+      id: reviewWorkflowsTable.id,
+      customerId: reviewWorkflowsTable.customerId,
+      jobId: reviewWorkflowsTable.jobId,
+      internalIssueNotes: reviewWorkflowsTable.internalIssueNotes,
+    })
     .from(reviewWorkflowsTable)
     .where(eq(reviewWorkflowsTable.isIssueFlagged, true));
 
@@ -101,7 +115,6 @@ async function buildDailyPayload(date: string) {
   const [topCanvasser] = await db
     .select({
       canvasser: canvassingSessionsTable.canvasser,
-      totalRevenue: sql<number>`sum(${canvassingSessionsTable.revenueSold}::numeric)`.mapWith(Number),
     })
     .from(canvassingSessionsTable)
     .where(eq(canvassingSessionsTable.sessionDate, date))
@@ -111,10 +124,7 @@ async function buildDailyPayload(date: string) {
 
   // Top technician
   const [topTech] = await db
-    .select({
-      technician: jobsTable.technicianAssigned,
-      jobsDone: sql<number>`count(*)`.mapWith(Number),
-    })
+    .select({ technician: jobsTable.technicianAssigned })
     .from(jobsTable)
     .where(and(
       eq(jobsTable.status, "completed"),
@@ -125,7 +135,7 @@ async function buildDailyPayload(date: string) {
     .orderBy(sql`count(*) DESC`)
     .limit(1);
 
-  // Tomorrow's scheduled jobs
+  // Tomorrow's schedule
   const tomorrowJobs = await db
     .select({
       id: jobsTable.id,
@@ -142,15 +152,14 @@ async function buildDailyPayload(date: string) {
     ))
     .orderBy(jobsTable.scheduledAt);
 
-  // Enrich with customer names
   const nextDaySchedule = await Promise.all(
     tomorrowJobs.map(async (j) => {
       const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, j.customerId));
       return {
-        jobId: j.id,
-        customerName: customer ? `${customer.firstName} ${customer.lastName}` : "Unknown",
-        serviceType: j.serviceType,
-        scheduledAt: j.scheduledAt?.toISOString() ?? "",
+        job_id: j.id,
+        customer_name: customer ? `${customer.firstName} ${customer.lastName}` : "Unknown",
+        service_type: j.serviceType,
+        scheduled_at: j.scheduledAt?.toISOString() ?? "",
         technician: j.technicianAssigned ?? null,
       };
     })
@@ -158,72 +167,123 @@ async function buildDailyPayload(date: string) {
 
   // Build anomaly notes
   const anomalies: string[] = [];
-  if (closes < 2) anomalies.push(`Low close count: only ${closes} close(s) today.`);
-  if (revenueSold < 600) anomalies.push(`Revenue below 50% of target: $${revenueSold}.`);
-  if ((openIssues.count ?? 0) > 0) anomalies.push(`${openIssues.count} unresolved customer issue(s) need attention.`);
-  if ((canvasTotals.goodConversations ?? 0) < 10) anomalies.push(`Low conversation count: ${canvasTotals.goodConversations ?? 0} good conversations.`);
+  if (closes === 0) anomalies.push("No closes recorded today.");
+  else if (closes < 2) anomalies.push(`Low close count: only ${closes} close(s) today.`);
+  if (revenueSold === 0) anomalies.push("No revenue sold today.");
+  else if (revenueSold < 600) anomalies.push(`Revenue below 50% of target: $${revenueSold}.`);
+  if (goodConversations < 10) anomalies.push(`Low conversation count: ${goodConversations} good conversations.`);
+  if (openIssueRecords.length > 0) anomalies.push(`${openIssueRecords.length} unresolved customer issue(s) need attention.`);
+  if (bundlesSold === 0) anomalies.push("No bundles sold today.");
 
+  // Canonical Robin payload (snake_case)
   const payload = {
-    businessName: BUSINESS_NAME,
-    reportDate: date,
-    salesMetrics: {
-      doorsKnocked: canvasTotals.doorsKnocked ?? 0,
-      goodConversations: canvasTotals.goodConversations ?? 0,
-      quotesGiven,
+    business_name: BUSINESS_NAME,
+    report_date: date,
+    sales_metrics: {
+      doors_knocked: canvasTotals.doorsKnocked ?? 0,
+      good_conversations: goodConversations,
+      quotes_given: quotesGiven,
       closes,
-      closeRate,
-      revenueSold,
-      averageTicket,
-      bundlesSold: canvasTotals.bundlesSold ?? 0,
+      close_rate_pct: closeRatePct,
+      revenue_sold: revenueSold,
+      average_ticket: averageTicket,
+      bundles_sold: bundlesSold,
     },
-    fulfillmentMetrics: {
-      jobsCompleted: jobTotals.jobsCompleted ?? 0,
-      cashCollected: jobTotals.cashCollected ?? 0,
-      tomorrowScheduled: nextDaySchedule.length,
+    fulfillment_metrics: {
+      jobs_completed: jobTotals.jobsCompleted ?? 0,
+      cash_collected: jobTotals.cashCollected ?? 0,
+      jobs_scheduled_tomorrow: nextDaySchedule.length,
     },
-    reviewMetrics: {
-      reviewRequestsSent: reviewsSent.count ?? 0,
-      positiveSatisfaction: positiveSat.count ?? 0,
-      negativeSatisfaction: negativeSat.count ?? 0,
-      reviewsReceived: reviewsReceived.count ?? 0,
+    review_metrics: {
+      satisfaction_requests_sent: reviewsSent.count ?? 0,
+      positive_responses: positiveSat.count ?? 0,
+      negative_responses: negativeSat.count ?? 0,
+      reviews_received: reviewsReceived.count ?? 0,
     },
-    teamMetrics: {
-      topCanvasser: topCanvasser?.canvasser ?? null,
-      topTechnician: topTech?.technician ?? null,
+    team_metrics: {
+      top_canvasser: topCanvasser?.canvasser ?? null,
+      top_technician: topTech?.technician ?? null,
+      canvasser_count_active_today: canvasTotals.canvasserCount ?? 0,
     },
-    openIssues: openIssues.count ?? 0,
-    nextDaySchedule,
-    notes: anomalies.length > 0 ? anomalies.join(" ") : null,
+    open_issues: {
+      count: openIssueRecords.length,
+      details: openIssueRecords.map(r => ({
+        workflowId: r.id,
+        customerId: r.customerId,
+        jobId: r.jobId,
+        notes: r.internalIssueNotes ?? null,
+      })),
+    },
+    next_day_schedule: nextDaySchedule,
+    daily_targets: {
+      good_conversations: { goal: KPI_GOALS.good_conversations, actual: goodConversations, met: goodConversations >= KPI_GOALS.good_conversations },
+      closes: { goal: KPI_GOALS.closes, actual: closes, met: closes >= KPI_GOALS.closes },
+      revenue_sold: { goal: KPI_GOALS.revenue_sold, actual: revenueSold, met: revenueSold >= KPI_GOALS.revenue_sold },
+      bundles: { goal: KPI_GOALS.bundles, actual: bundlesSold, met: bundlesSold >= KPI_GOALS.bundles },
+    },
+    anomaly_notes: anomalies.length > 0 ? anomalies.join(" ") : null,
   };
 
-  return {
-    payload,
-    closes,
+  return payload;
+}
+
+async function saveAndDeliver(date: string, payload: ReturnType<typeof buildRobinPayload> extends Promise<infer T> ? T : never, webhookUrl?: string) {
+  const closes = payload.sales_metrics.closes;
+  const quotesGiven = payload.sales_metrics.quotes_given;
+
+  const reportValues = {
+    reportDate: date,
+    doorsKnocked: payload.sales_metrics.doors_knocked,
+    goodConversations: payload.sales_metrics.good_conversations,
     quotesGiven,
-    closeRate,
-    revenueSold,
-    averageTicket,
-    topCanvasser: topCanvasser?.canvasser ?? null,
-    topTech: topTech?.technician ?? null,
-    openIssues: openIssues.count ?? 0,
-    bundlesSold: canvasTotals.bundlesSold ?? 0,
-    jobsCompleted: jobTotals.jobsCompleted ?? 0,
-    cashCollected: jobTotals.cashCollected ?? 0,
-    reviewRequestsSent: reviewsSent.count ?? 0,
-    positiveSatisfaction: positiveSat.count ?? 0,
-    negativeSatisfaction: negativeSat.count ?? 0,
-    reviewsReceived: reviewsReceived.count ?? 0,
-    doorsKnocked: canvasTotals.doorsKnocked ?? 0,
-    goodConversations: canvasTotals.goodConversations ?? 0,
-    anomalies: anomalies.join(" ") || null,
+    closes,
+    closeRate: payload.sales_metrics.close_rate_pct.toString(),
+    revenueSold: payload.sales_metrics.revenue_sold.toString(),
+    averageTicket: payload.sales_metrics.average_ticket.toString(),
+    bundlesSold: payload.sales_metrics.bundles_sold,
+    jobsCompleted: payload.fulfillment_metrics.jobs_completed,
+    cashCollected: payload.fulfillment_metrics.cash_collected.toString(),
+    reviewRequestsSent: payload.review_metrics.satisfaction_requests_sent,
+    positiveSatisfactionResponses: payload.review_metrics.positive_responses,
+    negativeSatisfactionResponses: payload.review_metrics.negative_responses,
+    reviewsReceived: payload.review_metrics.reviews_received,
+    topCanvasser: payload.team_metrics.top_canvasser,
+    topTechnician: payload.team_metrics.top_technician,
+    openIssuesCount: payload.open_issues.count,
+    anomaliesNotes: payload.anomaly_notes,
+    fullPayload: payload as unknown as Record<string, unknown>,
   };
+
+  await db.insert(dailyReportsTable)
+    .values(reportValues)
+    .onConflictDoUpdate({
+      target: dailyReportsTable.reportDate,
+      set: reportValues,
+    });
+
+  // Webhook delivery
+  const deliveryUrl = webhookUrl || process.env.ROBIN_REPORT_WEBHOOK_URL;
+  if (deliveryUrl) {
+    try {
+      const response = await fetch(deliveryUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      await db.update(dailyReportsTable)
+        .set({ webhookSent: true, webhookSentAt: new Date() })
+        .where(eq(dailyReportsTable.reportDate, date));
+      console.log(`[Report] Webhook delivered to ${deliveryUrl} — status ${response.status}`);
+    } catch (err) {
+      console.error(`[Report] Webhook delivery failed:`, err);
+    }
+  }
 }
 
 // GET /reports/daily
 router.get("/daily", async (req, res) => {
   try {
     const { startDate, endDate, limit } = req.query as Record<string, string | undefined>;
-    let query = db.select().from(dailyReportsTable);
     const conditions: ReturnType<typeof eq>[] = [];
     if (startDate) conditions.push(gte(dailyReportsTable.reportDate, startDate));
     if (endDate) conditions.push(lte(dailyReportsTable.reportDate, endDate));
@@ -250,55 +310,10 @@ router.post("/daily/generate", async (req, res) => {
     const { date, webhookUrl } = req.body as { date: string; webhookUrl?: string };
     if (!date) return res.status(400).json({ error: "date is required" });
 
-    const data = await buildDailyPayload(date);
+    const payload = await buildRobinPayload(date);
+    await saveAndDeliver(date, payload, webhookUrl);
 
-    // Upsert daily report
-    const reportValues = {
-      reportDate: date,
-      doorsKnocked: data.doorsKnocked,
-      goodConversations: data.goodConversations,
-      quotesGiven: data.quotesGiven,
-      closes: data.closes,
-      closeRate: data.closeRate.toString(),
-      revenueSold: data.revenueSold.toString(),
-      averageTicket: data.averageTicket.toString(),
-      bundlesSold: data.bundlesSold,
-      jobsCompleted: data.jobsCompleted,
-      cashCollected: data.cashCollected.toString(),
-      reviewRequestsSent: data.reviewRequestsSent,
-      positiveSatisfactionResponses: data.positiveSatisfaction,
-      negativeSatisfactionResponses: data.negativeSatisfaction,
-      reviewsReceived: data.reviewsReceived,
-      topCanvasser: data.topCanvasser,
-      topTechnician: data.topTech,
-      openIssuesCount: data.openIssues,
-      anomaliesNotes: data.anomalies,
-      fullPayload: data.payload,
-    };
-
-    await db.insert(dailyReportsTable)
-      .values(reportValues)
-      .onConflictDoUpdate({
-        target: dailyReportsTable.reportDate,
-        set: reportValues,
-      });
-
-    // If webhookUrl provided, post to it (fire and forget)
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data.payload),
-      }).then(async () => {
-        await db.update(dailyReportsTable)
-          .set({ webhookSent: true, webhookSentAt: new Date() })
-          .where(eq(dailyReportsTable.reportDate, date));
-      }).catch(err => {
-        console.error("Webhook delivery failed:", err);
-      });
-    }
-
-    res.json(data.payload);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -309,16 +324,46 @@ router.post("/daily/generate", async (req, res) => {
 router.get("/daily/:date/export", async (req, res) => {
   try {
     const { date } = req.params;
+    const format = (req.query.format as string) ?? "json";
 
-    // Try to get from DB first
+    // Try stored payload first
     const [stored] = await db.select().from(dailyReportsTable).where(eq(dailyReportsTable.reportDate, date));
-    if (stored?.fullPayload) {
-      return res.json(stored.fullPayload);
+    const payload = stored?.fullPayload ?? await buildRobinPayload(date);
+
+    if (format === "csv") {
+      // Flatten top-level metrics into CSV
+      const flat = stored ? {
+        report_date: stored.reportDate,
+        doors_knocked: stored.doorsKnocked,
+        good_conversations: stored.goodConversations,
+        quotes_given: stored.quotesGiven,
+        closes: stored.closes,
+        close_rate: stored.closeRate,
+        revenue_sold: stored.revenueSold,
+        average_ticket: stored.averageTicket,
+        bundles_sold: stored.bundlesSold,
+        jobs_completed: stored.jobsCompleted,
+        cash_collected: stored.cashCollected,
+        review_requests_sent: stored.reviewRequestsSent,
+        positive_sat: stored.positiveSatisfactionResponses,
+        negative_sat: stored.negativeSatisfactionResponses,
+        reviews_received: stored.reviewsReceived,
+        top_canvasser: stored.topCanvasser,
+        top_technician: stored.topTechnician,
+        open_issues: stored.openIssuesCount,
+        anomalies: stored.anomaliesNotes,
+      } : { report_date: date, error: "no stored report" };
+
+      const headers = Object.keys(flat).join(",");
+      const values = Object.values(flat).map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",");
+      const csv = `${headers}\n${values}`;
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="healthy-home-report-${date}.csv"`);
+      return res.send(csv);
     }
 
-    // Otherwise build fresh
-    const data = await buildDailyPayload(date);
-    res.json(data.payload);
+    res.json(payload);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

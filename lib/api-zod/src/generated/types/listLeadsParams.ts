@@ -3,13 +3,14 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { ListLeadsStatus } from "./listLeadsStatus";
 
 export type ListLeadsParams = {
   status?: ListLeadsStatus;
   canvasser?: string;
+  source?: string;
   startDate?: string;
   endDate?: string;
 };

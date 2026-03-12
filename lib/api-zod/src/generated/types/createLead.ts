@@ -3,16 +3,21 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { CreateLeadSource } from "./createLeadSource";
 import type { CreateLeadStatus } from "./createLeadStatus";
 
 export interface CreateLead {
-  customerName: string;
-  address?: string | null;
+  firstName: string;
+  lastName?: string;
   phone?: string | null;
   email?: string | null;
-  leadSource?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  source?: CreateLeadSource;
   canvasser?: string | null;
   quoteAmount?: string | null;
   serviceInterest?: string | null;

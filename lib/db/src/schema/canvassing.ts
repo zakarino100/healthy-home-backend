@@ -20,6 +20,13 @@ export const leadStatusEnum = pgEnum("lead_status", [
   "lost",
 ]);
 
+export const leadSourceEnum = pgEnum("lead_source_type", [
+  "d2d",
+  "referral",
+  "ad",
+  "other",
+]);
+
 export const canvassingSessionsTable = pgTable("canvassing_sessions", {
   id: serial("id").primaryKey(),
   canvasser: text("canvasser").notNull(),
@@ -50,11 +57,15 @@ export type CanvassingSession = typeof canvassingSessionsTable.$inferSelect;
 
 export const leadsTable = pgTable("leads", {
   id: serial("id").primaryKey(),
-  customerName: text("customer_name").notNull(),
-  address: text("address"),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull().default(""),
   phone: text("phone"),
   email: text("email"),
-  leadSource: text("lead_source"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+  source: leadSourceEnum("source").default("d2d"),
   canvasser: text("canvasser"),
   quoteAmount: numeric("quote_amount", { precision: 10, scale: 2 }),
   serviceInterest: text("service_interest"),
@@ -62,6 +73,7 @@ export const leadsTable = pgTable("leads", {
   followUpDate: date("follow_up_date"),
   notes: text("notes"),
   sessionId: integer("session_id").references(() => canvassingSessionsTable.id),
+  convertedToCustomerId: integer("converted_to_customer_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

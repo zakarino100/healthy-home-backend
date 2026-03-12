@@ -3,17 +3,22 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { LeadSource } from "./leadSource";
 import type { LeadStatus } from "./leadStatus";
 
 export interface Lead {
   id: number;
-  customerName: string;
-  address?: string | null;
+  firstName: string;
+  lastName: string;
   phone?: string | null;
   email?: string | null;
-  leadSource?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  source?: LeadSource;
   canvasser?: string | null;
   quoteAmount?: string | null;
   serviceInterest?: string | null;
@@ -21,6 +26,7 @@ export interface Lead {
   followUpDate?: string | null;
   notes?: string | null;
   sessionId?: number | null;
+  convertedToCustomerId?: number | null;
   createdAt: string;
   updatedAt: string;
 }

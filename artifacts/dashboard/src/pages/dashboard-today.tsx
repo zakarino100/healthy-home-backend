@@ -29,7 +29,7 @@ export default function DashboardToday() {
         <StatCard 
           title="Revenue Sold" 
           value={formatCurrency(data.revenueSold)} 
-          target={formatCurrency(data.kpiTargets?.revenueSold)} 
+          target={data.kpiTargets?.revenueSold} 
           delay="delay-100"
         />
         <StatCard 

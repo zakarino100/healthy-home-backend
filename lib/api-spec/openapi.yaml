@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.1.0
+  version: 0.2.0
   description: Healthy Home Operating System API
 servers:
   - url: /api
@@ -9,6 +9,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: Team member management
   - name: canvassing
     description: Canvassing session tracking
   - name: leads
@@ -39,6 +41,113 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List team members
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, canvasser, technician]
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Deactivate a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
 
   /canvassing/sessions:
     get:
@@ -140,6 +249,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CanvassingSession"
+    delete:
+      operationId: deleteCanvassingSession
+      tags: [canvassing]
+      summary: Delete a canvassing session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /canvassing/leads:
     get:
@@ -153,6 +279,10 @@ paths:
             type: string
             enum: [new, quoted, follow_up, sold, lost]
         - name: canvasser
+          in: query
+          schema:
+            type: string
+        - name: source
           in: query
           schema:
             type: string
@@ -238,6 +368,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /canvassing/leads/{id}/convert:
+    post:
+      operationId: convertLeadToCustomer
+      tags: [leads]
+      summary: Convert a sold lead into a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Customer created from lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: Lead not eligible for conversion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /customers:
     get:
@@ -666,26 +844,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DailyReportPayload"
+                $ref: "#/components/schemas/RobinPayload"
 
   /reports/daily/{date}/export:
     get:
       operationId: exportDailyReport
       tags: [reports]
-      summary: Export daily report as JSON
+      summary: Export daily report as JSON or CSV
       parameters:
         - name: date
           in: path
           required: true
           schema:
             type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
       responses:
         "200":
           description: Report payload
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DailyReportPayload"
+                $ref: "#/components/schemas/RobinPayload"
+            text/csv:
+              schema:
+                type: string
 
 components:
   schemas:
@@ -704,6 +890,50 @@ components:
           type: string
       required:
         - error
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, canvasser, technician]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - role
+        - active
+        - createdAt
+        - updatedAt
+
+    CreateUser:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, canvasser, technician]
+        active:
+          type: boolean
+      required:
+        - name
+        - role
 
     CanvassingSession:
       type: object
@@ -813,19 +1043,31 @@ components:
       properties:
         id:
           type: integer
-        customerName:
+        firstName:
           type: string
-        address:
+        lastName:
           type: string
-          nullable: true
         phone:
           type: string
           nullable: true
         email:
           type: string
           nullable: true
-        leadSource:
+        address:
           type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [d2d, referral, ad, other]
           nullable: true
         canvasser:
           type: string
@@ -846,6 +1088,9 @@ components:
           type: string
           nullable: true
         sessionId:
+          type: integer
+          nullable: true
+        convertedToCustomerId:
           type: integer
           nullable: true
         createdAt:
@@ -854,7 +1099,8 @@ components:
           type: string
       required:
         - id
-        - customerName
+        - firstName
+        - lastName
         - status
         - createdAt
         - updatedAt
@@ -862,19 +1108,31 @@ components:
     CreateLead:
       type: object
       properties:
-        customerName:
+        firstName:
           type: string
-        address:
+        lastName:
           type: string
-          nullable: true
         phone:
           type: string
           nullable: true
         email:
           type: string
           nullable: true
-        leadSource:
+        address:
           type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [d2d, referral, ad, other]
           nullable: true
         canvasser:
           type: string
@@ -898,7 +1156,7 @@ components:
           type: integer
           nullable: true
       required:
-        - customerName
+        - firstName
 
     Customer:
       type: object
@@ -1134,6 +1392,15 @@ components:
           nullable: true
         isOldCustomerCampaign:
           type: boolean
+        deliveryChannel:
+          type: string
+          enum: [sms, email, manual, unknown]
+        deliveryStatus:
+          type: string
+          enum: [pending, sent, failed, skipped]
+        deliveryLog:
+          type: string
+          nullable: true
         createdAt:
           type: string
         updatedAt:
@@ -1145,6 +1412,8 @@ components:
         - status
         - isIssueFlagged
         - isOldCustomerCampaign
+        - deliveryChannel
+        - deliveryStatus
         - createdAt
         - updatedAt
 
@@ -1488,114 +1757,190 @@ components:
       required:
         - date
 
-    DailyReportPayload:
+    RobinPayload:
       type: object
       properties:
-        businessName:
+        business_name:
           type: string
-        reportDate:
+        report_date:
           type: string
-        salesMetrics:
+        sales_metrics:
           type: object
           properties:
-            doorsKnocked:
+            doors_knocked:
               type: integer
-            goodConversations:
+            good_conversations:
               type: integer
-            quotesGiven:
+            quotes_given:
               type: integer
             closes:
               type: integer
-            closeRate:
+            close_rate_pct:
               type: number
-            revenueSold:
+            revenue_sold:
               type: number
-            averageTicket:
+            average_ticket:
               type: number
-            bundlesSold:
+            bundles_sold:
               type: integer
           required:
-            - doorsKnocked
-            - goodConversations
-            - quotesGiven
+            - doors_knocked
+            - good_conversations
+            - quotes_given
             - closes
-            - closeRate
-            - revenueSold
-            - averageTicket
-            - bundlesSold
-        fulfillmentMetrics:
+            - close_rate_pct
+            - revenue_sold
+            - average_ticket
+            - bundles_sold
+        fulfillment_metrics:
           type: object
           properties:
-            jobsCompleted:
+            jobs_completed:
               type: integer
-            cashCollected:
+            cash_collected:
               type: number
-            tomorrowScheduled:
+            jobs_scheduled_tomorrow:
               type: integer
           required:
-            - jobsCompleted
-            - cashCollected
-            - tomorrowScheduled
-        reviewMetrics:
+            - jobs_completed
+            - cash_collected
+            - jobs_scheduled_tomorrow
+        review_metrics:
           type: object
           properties:
-            reviewRequestsSent:
+            satisfaction_requests_sent:
               type: integer
-            positiveSatisfaction:
+            positive_responses:
               type: integer
-            negativeSatisfaction:
+            negative_responses:
               type: integer
-            reviewsReceived:
+            reviews_received:
               type: integer
           required:
-            - reviewRequestsSent
-            - positiveSatisfaction
-            - negativeSatisfaction
-            - reviewsReceived
-        teamMetrics:
+            - satisfaction_requests_sent
+            - positive_responses
+            - negative_responses
+            - reviews_received
+        team_metrics:
           type: object
           properties:
-            topCanvasser:
+            top_canvasser:
               type: string
               nullable: true
-            topTechnician:
+            top_technician:
               type: string
               nullable: true
+            canvasser_count_active_today:
+              type: integer
           required:
-            - topCanvasser
-            - topTechnician
-        openIssues:
-          type: integer
-        nextDaySchedule:
+            - top_canvasser
+            - top_technician
+            - canvasser_count_active_today
+        open_issues:
+          type: object
+          properties:
+            count:
+              type: integer
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  workflowId:
+                    type: integer
+                  customerId:
+                    type: integer
+                  jobId:
+                    type: integer
+                  notes:
+                    type: string
+                    nullable: true
+                required:
+                  - workflowId
+                  - customerId
+                  - jobId
+          required:
+            - count
+            - details
+        next_day_schedule:
           type: array
           items:
             type: object
             properties:
-              jobId:
+              job_id:
                 type: integer
-              customerName:
+              customer_name:
                 type: string
-              serviceType:
+              service_type:
                 type: string
-              scheduledAt:
+              scheduled_at:
                 type: string
               technician:
                 type: string
                 nullable: true
             required:
-              - jobId
-              - customerName
-              - serviceType
-              - scheduledAt
-        notes:
+              - job_id
+              - customer_name
+              - service_type
+              - scheduled_at
+        daily_targets:
+          type: object
+          properties:
+            good_conversations:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            closes:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            revenue_sold:
+              type: object
+              properties:
+                goal:
+                  type: number
+                actual:
+                  type: number
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            bundles:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+          required:
+            - good_conversations
+            - closes
+            - revenue_sold
+            - bundles
+        anomaly_notes:
           type: string
           nullable: true
       required:
-        - businessName
-        - reportDate
-        - salesMetrics
-        - fulfillmentMetrics
-        - reviewMetrics
-        - teamMetrics
-        - openIssues
-        - nextDaySchedule
+        - business_name
+        - report_date
+        - sales_metrics
+        - fulfillment_metrics
+        - review_metrics
+        - team_metrics
+        - open_issues
+        - next_day_schedule
+        - daily_targets

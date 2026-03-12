@@ -2,6 +2,7 @@ import { useGetDashboardWeekly } from "@workspace/api-client-react";
 import { formatCurrency, formatPercentage, formatDate } from "@/lib/utils";
 import { StatCard, PageLoader, ErrorState, Card } from "@/components/ui-components";
 import { Trophy, TrendingUp, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function DashboardWeekly() {

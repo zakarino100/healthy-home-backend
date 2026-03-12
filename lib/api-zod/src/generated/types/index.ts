@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export * from "./canvassingSession";
@@ -14,18 +14,17 @@ export * from "./createJobPaymentStatus";
 export * from "./createJobServiceType";
 export * from "./createJobStatus";
 export * from "./createLead";
+export * from "./createLeadSource";
 export * from "./createLeadStatus";
+export * from "./createUser";
+export * from "./createUserRole";
 export * from "./customer";
 export * from "./dailyReport";
-export * from "./dailyReportPayload";
-export * from "./dailyReportPayloadFulfillmentMetrics";
-export * from "./dailyReportPayloadNextDayScheduleItem";
-export * from "./dailyReportPayloadReviewMetrics";
-export * from "./dailyReportPayloadSalesMetrics";
-export * from "./dailyReportPayloadTeamMetrics";
 export * from "./dashboardToday";
 export * from "./dashboardWeekly";
 export * from "./errorResponse";
+export * from "./exportDailyReportFormat";
+export * from "./exportDailyReportParams";
 export * from "./generateReportInput";
 export * from "./getDashboardWeeklyParams";
 export * from "./healthStatus";
@@ -38,6 +37,7 @@ export * from "./jobStatus";
 export * from "./kpiTargets";
 export * from "./lead";
 export * from "./leaderboardEntry";
+export * from "./leadSource";
 export * from "./leadStatus";
 export * from "./listCanvassingSessionsParams";
 export * from "./listCustomersParams";
@@ -47,10 +47,29 @@ export * from "./listJobsStatus";
 export * from "./listLeadsParams";
 export * from "./listLeadsStatus";
 export * from "./listReviewWorkflowsParams";
+export * from "./listUsersParams";
+export * from "./listUsersRole";
 export * from "./resolveIssueInput";
 export * from "./reviewCampaignInput";
 export * from "./reviewCampaignResult";
 export * from "./reviewWorkflow";
+export * from "./reviewWorkflowDeliveryChannel";
+export * from "./reviewWorkflowDeliveryStatus";
+export * from "./robinPayload";
+export * from "./robinPayloadDailyTargets";
+export * from "./robinPayloadDailyTargetsBundles";
+export * from "./robinPayloadDailyTargetsCloses";
+export * from "./robinPayloadDailyTargetsGoodConversations";
+export * from "./robinPayloadDailyTargetsRevenueSold";
+export * from "./robinPayloadFulfillmentMetrics";
+export * from "./robinPayloadNextDayScheduleItem";
+export * from "./robinPayloadOpenIssues";
+export * from "./robinPayloadOpenIssuesDetailsItem";
+export * from "./robinPayloadReviewMetrics";
+export * from "./robinPayloadSalesMetrics";
+export * from "./robinPayloadTeamMetrics";
 export * from "./satisfactionInput";
 export * from "./techStat";
 export * from "./updateJobContent";
+export * from "./user";
+export * from "./userRole";

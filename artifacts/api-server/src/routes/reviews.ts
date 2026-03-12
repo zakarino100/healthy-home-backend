@@ -76,7 +76,7 @@ router.post("/:id/resolve-issue", async (req, res) => {
       .set({
         isIssueFlagged: false,
         internalIssueNotes: notes,
-        status: "feedback_requested",
+        status: "resolved",
         feedbackReceivedAt: new Date(),
         updatedAt: new Date(),
       })

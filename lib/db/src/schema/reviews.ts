@@ -20,6 +20,21 @@ export const reviewWorkflowStatusEnum = pgEnum("review_workflow_status", [
   "review_completed",
   "feedback_requested",
   "issue_flagged",
+  "resolved",
+]);
+
+export const deliveryChannelEnum = pgEnum("delivery_channel", [
+  "sms",
+  "email",
+  "manual",
+  "unknown",
+]);
+
+export const deliveryStatusEnum = pgEnum("delivery_status", [
+  "pending",
+  "sent",
+  "failed",
+  "skipped",
 ]);
 
 export const reviewWorkflowsTable = pgTable("review_workflows", {
@@ -42,6 +57,9 @@ export const reviewWorkflowsTable = pgTable("review_workflows", {
   isIssueFlagged: boolean("is_issue_flagged").notNull().default(false),
   internalIssueNotes: text("internal_issue_notes"),
   isOldCustomerCampaign: boolean("is_old_customer_campaign").notNull().default(false),
+  deliveryChannel: deliveryChannelEnum("delivery_channel").notNull().default("unknown"),
+  deliveryStatus: deliveryStatusEnum("delivery_status").notNull().default("pending"),
+  deliveryLog: text("delivery_log"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

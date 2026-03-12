@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Healthy Home Operating System API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
@@ -11,6 +11,40 @@ export interface HealthStatus {
 
 export interface ErrorResponse {
   error: string;
+}
+
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+
+export const UserRole = {
+  admin: "admin",
+  canvasser: "canvasser",
+  technician: "technician",
+} as const;
+
+export interface User {
+  id: number;
+  name: string;
+  email?: string | null;
+  role: UserRole;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateUserRole =
+  (typeof CreateUserRole)[keyof typeof CreateUserRole];
+
+export const CreateUserRole = {
+  admin: "admin",
+  canvasser: "canvasser",
+  technician: "technician",
+} as const;
+
+export interface CreateUser {
+  name: string;
+  email?: string | null;
+  role: CreateUserRole;
+  active?: boolean;
 }
 
 export interface CanvassingSession {
@@ -50,6 +84,15 @@ export interface CreateCanvassingSession {
   notes?: string | null;
 }
 
+export type LeadSource = (typeof LeadSource)[keyof typeof LeadSource] | null;
+
+export const LeadSource = {
+  d2d: "d2d",
+  referral: "referral",
+  ad: "ad",
+  other: "other",
+} as const;
+
 export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
 
 export const LeadStatus = {
@@ -62,11 +105,15 @@ export const LeadStatus = {
 
 export interface Lead {
   id: number;
-  customerName: string;
-  address?: string | null;
+  firstName: string;
+  lastName: string;
   phone?: string | null;
   email?: string | null;
-  leadSource?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  source?: LeadSource;
   canvasser?: string | null;
   quoteAmount?: string | null;
   serviceInterest?: string | null;
@@ -74,9 +121,21 @@ export interface Lead {
   followUpDate?: string | null;
   notes?: string | null;
   sessionId?: number | null;
+  convertedToCustomerId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
+
+export type CreateLeadSource =
+  | (typeof CreateLeadSource)[keyof typeof CreateLeadSource]
+  | null;
+
+export const CreateLeadSource = {
+  d2d: "d2d",
+  referral: "referral",
+  ad: "ad",
+  other: "other",
+} as const;
 
 export type CreateLeadStatus =
   (typeof CreateLeadStatus)[keyof typeof CreateLeadStatus];
@@ -90,11 +149,15 @@ export const CreateLeadStatus = {
 } as const;
 
 export interface CreateLead {
-  customerName: string;
-  address?: string | null;
+  firstName: string;
+  lastName?: string;
   phone?: string | null;
   email?: string | null;
-  leadSource?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  source?: CreateLeadSource;
   canvasser?: string | null;
   quoteAmount?: string | null;
   serviceInterest?: string | null;
@@ -228,6 +291,26 @@ export interface CreateJob {
   notes?: string | null;
 }
 
+export type ReviewWorkflowDeliveryChannel =
+  (typeof ReviewWorkflowDeliveryChannel)[keyof typeof ReviewWorkflowDeliveryChannel];
+
+export const ReviewWorkflowDeliveryChannel = {
+  sms: "sms",
+  email: "email",
+  manual: "manual",
+  unknown: "unknown",
+} as const;
+
+export type ReviewWorkflowDeliveryStatus =
+  (typeof ReviewWorkflowDeliveryStatus)[keyof typeof ReviewWorkflowDeliveryStatus];
+
+export const ReviewWorkflowDeliveryStatus = {
+  pending: "pending",
+  sent: "sent",
+  failed: "failed",
+  skipped: "skipped",
+} as const;
+
 export interface ReviewWorkflow {
   id: number;
   jobId: number;
@@ -244,6 +327,9 @@ export interface ReviewWorkflow {
   isIssueFlagged: boolean;
   internalIssueNotes?: string | null;
   isOldCustomerCampaign: boolean;
+  deliveryChannel: ReviewWorkflowDeliveryChannel;
+  deliveryStatus: ReviewWorkflowDeliveryStatus;
+  deliveryLog?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -383,54 +469,112 @@ export interface GenerateReportInput {
   webhookUrl?: string | null;
 }
 
-export type DailyReportPayloadSalesMetrics = {
-  doorsKnocked: number;
-  goodConversations: number;
-  quotesGiven: number;
+export type RobinPayloadSalesMetrics = {
+  doors_knocked: number;
+  good_conversations: number;
+  quotes_given: number;
   closes: number;
-  closeRate: number;
-  revenueSold: number;
-  averageTicket: number;
-  bundlesSold: number;
+  close_rate_pct: number;
+  revenue_sold: number;
+  average_ticket: number;
+  bundles_sold: number;
 };
 
-export type DailyReportPayloadFulfillmentMetrics = {
-  jobsCompleted: number;
-  cashCollected: number;
-  tomorrowScheduled: number;
+export type RobinPayloadFulfillmentMetrics = {
+  jobs_completed: number;
+  cash_collected: number;
+  jobs_scheduled_tomorrow: number;
 };
 
-export type DailyReportPayloadReviewMetrics = {
-  reviewRequestsSent: number;
-  positiveSatisfaction: number;
-  negativeSatisfaction: number;
-  reviewsReceived: number;
+export type RobinPayloadReviewMetrics = {
+  satisfaction_requests_sent: number;
+  positive_responses: number;
+  negative_responses: number;
+  reviews_received: number;
 };
 
-export type DailyReportPayloadTeamMetrics = {
-  topCanvasser: string | null;
-  topTechnician: string | null;
+export type RobinPayloadTeamMetrics = {
+  top_canvasser: string | null;
+  top_technician: string | null;
+  canvasser_count_active_today: number;
 };
 
-export type DailyReportPayloadNextDayScheduleItem = {
+export type RobinPayloadOpenIssuesDetailsItem = {
+  workflowId: number;
+  customerId: number;
   jobId: number;
-  customerName: string;
-  serviceType: string;
-  scheduledAt: string;
+  notes?: string | null;
+};
+
+export type RobinPayloadOpenIssues = {
+  count: number;
+  details: RobinPayloadOpenIssuesDetailsItem[];
+};
+
+export type RobinPayloadNextDayScheduleItem = {
+  job_id: number;
+  customer_name: string;
+  service_type: string;
+  scheduled_at: string;
   technician?: string | null;
 };
 
-export interface DailyReportPayload {
-  businessName: string;
-  reportDate: string;
-  salesMetrics: DailyReportPayloadSalesMetrics;
-  fulfillmentMetrics: DailyReportPayloadFulfillmentMetrics;
-  reviewMetrics: DailyReportPayloadReviewMetrics;
-  teamMetrics: DailyReportPayloadTeamMetrics;
-  openIssues: number;
-  nextDaySchedule: DailyReportPayloadNextDayScheduleItem[];
-  notes?: string | null;
+export type RobinPayloadDailyTargetsGoodConversations = {
+  goal: number;
+  actual: number;
+  met: boolean;
+};
+
+export type RobinPayloadDailyTargetsCloses = {
+  goal: number;
+  actual: number;
+  met: boolean;
+};
+
+export type RobinPayloadDailyTargetsRevenueSold = {
+  goal: number;
+  actual: number;
+  met: boolean;
+};
+
+export type RobinPayloadDailyTargetsBundles = {
+  goal: number;
+  actual: number;
+  met: boolean;
+};
+
+export type RobinPayloadDailyTargets = {
+  good_conversations: RobinPayloadDailyTargetsGoodConversations;
+  closes: RobinPayloadDailyTargetsCloses;
+  revenue_sold: RobinPayloadDailyTargetsRevenueSold;
+  bundles: RobinPayloadDailyTargetsBundles;
+};
+
+export interface RobinPayload {
+  business_name: string;
+  report_date: string;
+  sales_metrics: RobinPayloadSalesMetrics;
+  fulfillment_metrics: RobinPayloadFulfillmentMetrics;
+  review_metrics: RobinPayloadReviewMetrics;
+  team_metrics: RobinPayloadTeamMetrics;
+  open_issues: RobinPayloadOpenIssues;
+  next_day_schedule: RobinPayloadNextDayScheduleItem[];
+  daily_targets: RobinPayloadDailyTargets;
+  anomaly_notes?: string | null;
 }
+
+export type ListUsersParams = {
+  role?: ListUsersRole;
+  active?: boolean;
+};
+
+export type ListUsersRole = (typeof ListUsersRole)[keyof typeof ListUsersRole];
+
+export const ListUsersRole = {
+  admin: "admin",
+  canvasser: "canvasser",
+  technician: "technician",
+} as const;
 
 export type ListCanvassingSessionsParams = {
   date?: string;
@@ -443,6 +587,7 @@ export type ListCanvassingSessionsParams = {
 export type ListLeadsParams = {
   status?: ListLeadsStatus;
   canvasser?: string;
+  source?: string;
   startDate?: string;
   endDate?: string;
 };
@@ -495,3 +640,15 @@ export type ListDailyReportsParams = {
   endDate?: string;
   limit?: number;
 };
+
+export type ExportDailyReportParams = {
+  format?: ExportDailyReportFormat;
+};
+
+export type ExportDailyReportFormat =
+  (typeof ExportDailyReportFormat)[keyof typeof ExportDailyReportFormat];
+
+export const ExportDailyReportFormat = {
+  json: "json",
+  csv: "csv",
+} as const;

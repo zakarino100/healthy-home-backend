@@ -6,6 +6,7 @@ import {
   Map, 
   Wrench, 
   Users, 
+  UserCog,
   Star, 
   FileText,
   Menu,
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/reviews", label: "Reviews", icon: Star },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/users", label: "Team", icon: UserCog },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
