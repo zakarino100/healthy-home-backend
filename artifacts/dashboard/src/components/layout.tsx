@@ -106,7 +106,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-2xl font-display font-bold text-slate-800 tracking-tight hidden sm:block">
+            <h1 className="text-lg sm:text-2xl font-display font-bold text-slate-800 tracking-tight">
               {navItems.find(i => i.href === location)?.label || "Dashboard"}
             </h1>
           </div>

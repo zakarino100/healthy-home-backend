@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 
 export function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("glass-panel rounded-2xl p-6 sm:p-8 hover-lift", className)} {...props}>
+    <div className={cn("glass-panel rounded-2xl p-4 sm:p-6 hover-lift", className)} {...props}>
       {children}
     </div>
   );
@@ -28,9 +28,9 @@ export function Button({ className, variant = "primary", size = "md", isLoading,
   };
 
   const sizes = {
-    sm: "px-4 py-2 text-sm",
-    md: "px-6 py-3 text-base",
-    lg: "px-8 py-4 text-lg",
+    sm: "px-3 py-2 text-sm",
+    md: "px-5 py-2.5 text-sm sm:px-6 sm:py-3 sm:text-base",
+    lg: "px-7 py-3.5 text-base sm:px-8 sm:py-4 sm:text-lg",
   };
 
   return (
@@ -49,7 +49,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input 
       className={cn(
-        "flex w-full px-4 py-3 rounded-xl bg-slate-50/50 border-2 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all duration-200",
+        "flex w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl bg-slate-50/50 border-2 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all duration-200 text-base",
         className
       )}
       {...props}
@@ -61,7 +61,7 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
   return (
     <select
       className={cn(
-        "flex w-full px-4 py-3 rounded-xl bg-slate-50/50 border-2 border-slate-200 text-slate-900 focus:outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all duration-200 appearance-none cursor-pointer",
+        "flex w-full px-3 py-2.5 sm:px-4 sm:py-3 rounded-xl bg-slate-50/50 border-2 border-slate-200 text-slate-900 focus:outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all duration-200 appearance-none cursor-pointer text-base",
         className
       )}
       {...props}
@@ -102,22 +102,22 @@ export function StatCard({ title, value, target, prefix = "", suffix = "", delay
 
   return (
     <Card className={cn("animate-in-stagger", delay)}>
-      <h3 className="text-slate-500 font-medium text-sm tracking-wide uppercase">{title}</h3>
-      <div className="mt-4 flex items-end justify-between">
-        <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-display font-extrabold text-slate-900 tracking-tight">
+      <h3 className="text-slate-500 font-medium text-xs sm:text-sm tracking-wide uppercase">{title}</h3>
+      <div className="mt-2 sm:mt-4 flex items-end justify-between gap-2">
+        <div className="flex items-baseline gap-1 min-w-0">
+          <span className="text-2xl sm:text-4xl font-display font-extrabold text-slate-900 tracking-tight truncate">
             {prefix}{value}{suffix}
           </span>
         </div>
         {target !== undefined && (
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Target</span>
             <p className="text-sm font-bold text-slate-700">{prefix}{target}{suffix}</p>
           </div>
         )}
       </div>
       {target !== undefined && (
-        <div className="mt-5 h-2 w-full bg-slate-100 rounded-full overflow-hidden relative">
+        <div className="mt-3 sm:mt-5 h-1.5 sm:h-2 w-full bg-slate-100 rounded-full overflow-hidden relative">
           <div 
             className={cn(
               "absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out",
@@ -145,12 +145,12 @@ export function PageLoader() {
 
 export function ErrorState({ error }: { error: any }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-center max-w-md mx-auto">
+    <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-center max-w-md mx-auto px-4">
       <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-6 shadow-inner">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
       </div>
-      <h2 className="text-2xl font-bold text-slate-900 mb-2">Something went wrong</h2>
-      <p className="text-slate-600 mb-6">{error?.message || "Failed to load data. Please try again."}</p>
+      <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">Something went wrong</h2>
+      <p className="text-slate-600 mb-6 text-sm">{error?.message || "Failed to load data. Please try again."}</p>
       <Button onClick={() => window.location.reload()}>Refresh Page</Button>
     </div>
   );
@@ -159,16 +159,16 @@ export function ErrorState({ error }: { error: any }) {
 export function Modal({ isOpen, onClose, title, children }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode }) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h2 className="text-xl font-display font-bold text-slate-900">{title}</h2>
+      <div className="relative bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full sm:max-w-lg max-h-[92vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200">
+        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <h2 className="text-lg sm:text-xl font-display font-bold text-slate-900">{title}</h2>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-colors">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="p-6 overflow-y-auto">
+        <div className="p-5 sm:p-6 overflow-y-auto">
           {children}
         </div>
       </div>
