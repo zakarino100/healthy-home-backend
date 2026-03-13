@@ -25,8 +25,8 @@ export default function DashboardToday() {
         </div>
       </div>
 
-      {/* KPI Cards — 2 columns on mobile, 4 on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      {/* KPI Cards — 2 cols on mobile/tablet, 4 on xl+ */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         <StatCard
           title="Revenue Sold"
           value={formatCurrency(data.revenueSold)}

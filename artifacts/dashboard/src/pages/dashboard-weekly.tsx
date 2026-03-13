@@ -27,8 +27,8 @@ export default function DashboardWeekly() {
         </div>
       </div>
 
-      {/* KPI — 2 cols on mobile */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      {/* KPI — 2 cols on mobile/tablet, 4 on xl+ */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         <StatCard title="Total Sold" value={formatCurrency(data.totalSold)} delay="delay-100" />
         <StatCard title="Collected" value={formatCurrency(data.totalCollected)} delay="delay-200" />
         <StatCard title="Jobs Done" value={data.totalCompleted} delay="delay-300" />

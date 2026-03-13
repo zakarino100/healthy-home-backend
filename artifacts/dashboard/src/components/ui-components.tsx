@@ -103,9 +103,9 @@ export function StatCard({ title, value, target, prefix = "", suffix = "", delay
   return (
     <Card className={cn("animate-in-stagger", delay)}>
       <h3 className="text-slate-500 font-medium text-xs sm:text-sm tracking-wide uppercase">{title}</h3>
-      <div className="mt-2 sm:mt-4 flex items-end justify-between gap-2">
+      <div className="mt-2 sm:mt-3 flex items-end justify-between gap-2">
         <div className="flex items-baseline gap-1 min-w-0">
-          <span className="text-2xl sm:text-4xl font-display font-extrabold text-slate-900 tracking-tight truncate">
+          <span className="text-xl md:text-2xl font-display font-extrabold text-slate-900 tracking-tight break-all leading-tight">
             {prefix}{value}{suffix}
           </span>
         </div>
