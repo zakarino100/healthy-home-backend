@@ -14,6 +14,7 @@ import CustomersPage from "@/pages/customers";
 import ReviewsPage from "@/pages/reviews";
 import ReportsPage from "@/pages/reports";
 import UsersPage from "@/pages/users";
+import LeadsPage from "@/pages/leads";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +33,7 @@ function Router() {
         <Route path="/weekly" component={DashboardWeekly} />
         <Route path="/jobs" component={JobsPage} />
         <Route path="/canvassing" component={CanvassingPage} />
+        <Route path="/leads" component={LeadsPage} />
         <Route path="/customers" component={CustomersPage} />
         <Route path="/reviews" component={ReviewsPage} />
         <Route path="/reports" component={ReportsPage} />

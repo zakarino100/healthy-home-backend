@@ -12,6 +12,7 @@ import {
   Menu,
   Droplets,
   Bell,
+  UserSearch,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/", label: "Today", icon: LayoutDashboard },
   { href: "/weekly", label: "Weekly", icon: CalendarDays },
   { href: "/canvassing", label: "Canvassing", icon: Map },
+  { href: "/leads", label: "Leads", icon: UserSearch },
   { href: "/jobs", label: "Jobs", icon: Wrench },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/reviews", label: "Reviews", icon: Star },
