@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateLead } from "@workspace/api-client-react";
 
 type Source = "d2d" | "referral" | "ad" | "other";
-type Status = "new" | "quoted" | "follow_up" | "sold" | "lost";
+type Status = "new" | "quoted" | "follow_up" | "sold" | "lost" | "no_answer" | "not_home" | "not_interested" | "contacted" | "completed";
 
 const SOURCE_LABELS: Record<Source, string> = {
   d2d: "Door-to-Door",
@@ -27,12 +27,30 @@ const SOURCE_COLORS: Record<Source, string> = {
   other: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-const STATUS_VARIANT: Record<Status, "default" | "success" | "warning" | "destructive" | "neutral"> = {
+const STATUS_LABELS: Record<string, string> = {
+  new: "New",
+  quoted: "Quoted",
+  follow_up: "Follow Up",
+  sold: "Sold",
+  lost: "Lost",
+  no_answer: "No Answer",
+  not_home: "Not Home",
+  not_interested: "Not Interested",
+  contacted: "Contacted",
+  completed: "Completed",
+};
+
+const STATUS_VARIANT: Record<string, "default" | "success" | "warning" | "destructive" | "neutral"> = {
   new: "default",
   quoted: "warning",
   follow_up: "warning",
   sold: "success",
   lost: "destructive",
+  no_answer: "neutral",
+  not_home: "neutral",
+  not_interested: "destructive",
+  contacted: "default",
+  completed: "success",
 };
 
 function heatColor(value: number, max: number): string {
@@ -217,17 +235,18 @@ export default function LeadsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 ml-auto">
-            {["all", "new", "quoted", "follow_up", "sold", "lost"].map((s) => (
+            {["all", "new", "no_answer", "not_home", "contacted", "follow_up", "quoted", "sold", "not_interested", "completed"].map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
                   statusFilter === s
-                    ? "bg-slate-800 text-white border-slate-800"
+                    ? s === "sold" ? "bg-emerald-600 text-white border-emerald-600"
+                    : "bg-slate-800 text-white border-slate-800"
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                 }`}
               >
-                {s === "all" ? "All Statuses" : s.replace("_", " ")}
+                {s === "all" ? "All Statuses" : (STATUS_LABELS[s] ?? s.replace(/_/g, " "))}
               </button>
             ))}
           </div>
@@ -249,8 +268,8 @@ export default function LeadsPage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${SOURCE_COLORS[lead.source as Source ?? "other"]}`}>
                         {SOURCE_LABELS[lead.source as Source ?? "other"]}
                       </span>
-                      <Badge variant={STATUS_VARIANT[lead.status as Status ?? "new"]}>
-                        {(lead.status ?? "new").replace("_", " ")}
+                      <Badge variant={STATUS_VARIANT[lead.status ?? "new"] ?? "neutral"}>
+                        {STATUS_LABELS[lead.status ?? "new"] ?? (lead.status ?? "new").replace(/_/g, " ")}
                       </Badge>
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -382,11 +401,14 @@ function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           <div>
             <Label>Status *</Label>
             <Select name="status" value={status} onChange={e => setStatus(e.target.value)} required>
-              <option value="new">New / Not Home</option>
+              <option value="new">New</option>
+              <option value="no_answer">No Answer</option>
+              <option value="not_home">Not Home</option>
+              <option value="contacted">Contacted</option>
               <option value="quoted">Quoted</option>
               <option value="follow_up">Follow Up</option>
               <option value="sold">Sold ✓</option>
-              <option value="lost">Lost</option>
+              <option value="not_interested">Not Interested</option>
             </Select>
           </div>
         </div>

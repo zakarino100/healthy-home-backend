@@ -10,7 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, isNull } from "drizzle-orm";
 
-const HH_BUSINESS_UNIT = "healthy_home";
+const HH_BUSINESS_UNIT = "Healthy Home";
 
 const router: IRouter = Router();
 
@@ -85,14 +85,16 @@ router.get("/pending-sales", async (req, res) => {
         zip: leadsTable.zip,
         phone: leadsTable.phone,
         canvasser: leadsTable.assignedRepEmail,
+        servicesInterested: leadsTable.servicesInterested,
         createdAt: leadsTable.createdAt,
         soldPrice: leadDetailsTable.soldPrice,
         quotePrice: leadDetailsTable.quotePrice,
         servicePackage: leadDetailsTable.servicePackage,
         isBundle: leadDetailsTable.isBundle,
+        detailsJobId: leadDetailsTable.jobId,
       })
       .from(leadsTable)
-      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.status, "sold"),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
@@ -103,6 +105,9 @@ router.get("/pending-sales", async (req, res) => {
     const pendingSales = rows.map(r => {
       const name = r.homeownerName ?? "";
       const spaceIdx = name.indexOf(" ");
+      const servicePackage = r.servicePackage
+        ?? (Array.isArray(r.servicesInterested) ? r.servicesInterested[0] : null)
+        ?? null;
       return {
         leadId: r.leadId,
         firstName: spaceIdx >= 0 ? name.slice(0, spaceIdx) : name,
@@ -115,8 +120,8 @@ router.get("/pending-sales", async (req, res) => {
         canvasser: r.canvasser,
         soldPrice: r.soldPrice,
         quotePrice: r.quotePrice,
-        servicePackage: r.servicePackage,
-        isBundle: r.isBundle,
+        servicePackage,
+        isBundle: r.isBundle ?? false,
         createdAt: r.createdAt,
       };
     });

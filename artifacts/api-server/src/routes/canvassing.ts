@@ -12,7 +12,7 @@ import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const HH_BUSINESS_UNIT = "healthy_home";
+const HH_BUSINESS_UNIT = "Healthy Home";
 
 // ---------------------------------------------------------------------------
 // Helpers — map between external API shape and the shared leads + lead_details tables
