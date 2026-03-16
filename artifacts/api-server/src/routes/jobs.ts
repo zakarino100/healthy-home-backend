@@ -8,7 +8,7 @@ import {
   leadsTable,
   leadDetailsTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql, isNull } from "drizzle-orm";
+import { eq, and, gte, lte, sql, isNull, or } from "drizzle-orm";
 
 const HH_BUSINESS_UNIT = "Healthy Home";
 
@@ -36,6 +36,11 @@ router.get("/", async (req, res) => {
       .select({
         id: jobsTable.id,
         customerId: jobsTable.customerId,
+        customerFirstName: customersTable.firstName,
+        customerLastName: customersTable.lastName,
+        customerAddress: customersTable.address,
+        customerCity: customersTable.city,
+        customerPhone: customersTable.phone,
         serviceType: jobsTable.serviceType,
         status: jobsTable.status,
         scheduledAt: jobsTable.scheduledAt,
@@ -51,6 +56,7 @@ router.get("/", async (req, res) => {
         createdAt: jobsTable.createdAt,
       })
       .from(jobsTable)
+      .leftJoin(customersTable, eq(customersTable.id, jobsTable.customerId))
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, jobsTable.leadId));
 
     const jobs = conditions.length > 0
@@ -201,6 +207,50 @@ router.post("/from-lead/:leadId", async (req, res) => {
       ?? body.serviceType
       ?? "SERVICE TBD";
 
+    // Check if a job was already auto-created for this lead (needs_scheduling)
+    const [existingJob] = await db
+      .select()
+      .from(jobsTable)
+      .where(eq(jobsTable.leadId, leadId));
+
+    if (existingJob) {
+      // Reuse the existing customer + job — just apply schedule info
+      const [existingCustomer] = await db
+        .select()
+        .from(customersTable)
+        .where(eq(customersTable.id, existingJob.customerId));
+
+      const [updatedJob] = await db.update(jobsTable)
+        .set({
+          status: body.scheduledAt ? "scheduled" : existingJob.status,
+          scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : existingJob.scheduledAt,
+          technicianAssigned: body.technicianAssigned ?? existingJob.technicianAssigned,
+          notes: body.notes ?? existingJob.notes,
+          updatedAt: new Date(),
+        })
+        .where(eq(jobsTable.id, existingJob.id))
+        .returning();
+
+      // Link lead_details.job_id so the lead disappears from pending-sales
+      if (row.details) {
+        await db.update(leadDetailsTable)
+          .set({ jobId: existingJob.id, updatedAt: new Date() })
+          .where(eq(leadDetailsTable.leadId, leadId));
+      } else {
+        await db.insert(leadDetailsTable).values({
+          leadId,
+          jobId: existingJob.id,
+          soldPrice: null,
+          quotePrice: null,
+          servicePackage: serviceType,
+          isBundle: false,
+        }).onConflictDoNothing();
+      }
+
+      return res.status(201).json({ customer: existingCustomer, job: updatedJob });
+    }
+
+    // No existing job — create customer + job from scratch
     const [customer] = await db.insert(customersTable).values({
       firstName: firstName || "Unknown",
       lastName,

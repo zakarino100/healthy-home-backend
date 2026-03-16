@@ -8,7 +8,18 @@ import { useToast } from "@/hooks/use-toast";
 
 import { TECHNICIANS } from "@/lib/constants";
 
-type FilterType = "all" | "scheduled" | "completed";
+type FilterType = "all" | "scheduled" | "needs_scheduling" | "completed";
+
+type SchedulingJob = {
+  id: number;
+  leadId: string | null;
+  customerFirstName: string | null;
+  customerLastName: string | null;
+  customerAddress: string | null;
+  customerCity: string | null;
+  serviceType: string;
+  soldPrice: string | null;
+};
 
 type PendingSale = {
   leadId: string;
@@ -32,6 +43,7 @@ export default function JobsPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [schedulingLead, setSchedulingLead] = useState<PendingSale | null>(null);
+  const [schedulingJob, setSchedulingJob] = useState<SchedulingJob | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -71,6 +83,7 @@ export default function JobsPage() {
 
   const FILTERS: { key: FilterType; label: string }[] = [
     { key: "all", label: "All" },
+    { key: "needs_scheduling", label: "Needs Scheduling" },
     { key: "scheduled", label: "Scheduled" },
     { key: "completed", label: "Done" },
   ];
@@ -176,31 +189,42 @@ export default function JobsPage() {
       {/* Regular jobs pipeline */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
         {jobs?.map((job) => (
-          <Card key={job.id} className="flex flex-col !p-4 sm:!p-6 border-t-4 border-t-transparent hover:border-t-primary transition-all">
+          <Card key={job.id} className={`flex flex-col !p-4 sm:!p-6 border-t-4 hover:border-t-primary transition-all ${
+              (job.status as string) === 'needs_scheduling' ? 'border-t-amber-400 bg-amber-50/20' : 'border-t-transparent'
+            }`}>
             <div className="flex justify-between items-start mb-3">
-              <Badge variant={job.status === 'scheduled' ? 'default' : job.status === 'completed' ? 'success' : 'neutral'}>
+              <Badge variant={(job.status as string) === 'scheduled' ? 'default' : (job.status as string) === 'completed' ? 'success' : 'warning'}>
                 {(job.status as string).replace(/_/g, " ").toUpperCase()}
               </Badge>
-              {(job.soldPrice || job.quotedPrice) && (
+              {((job as any).soldPrice || (job as any).quotedPrice) && (
                 <span className="flex items-center gap-1 text-base sm:text-lg font-bold text-slate-900">
                   <DollarSign className="w-4 h-4 text-emerald-500" />
-                  {formatCurrency(job.soldPrice || job.quotedPrice)}
+                  {formatCurrency((job as any).soldPrice || (job as any).quotedPrice)}
                 </span>
               )}
             </div>
 
-            <h3 className="font-bold text-base sm:text-lg text-slate-900 mb-1">Customer #{job.customerId}</h3>
+            <h3 className="font-bold text-base sm:text-lg text-slate-900 mb-0.5">
+              {(job as any).customerFirstName
+                ? `${(job as any).customerFirstName} ${(job as any).customerLastName ?? ""}`.trim()
+                : `Customer #${job.customerId}`}
+            </h3>
+            {(job as any).customerAddress && (
+              <p className="text-xs text-slate-500 mb-1">
+                {(job as any).customerAddress}{(job as any).customerCity ? `, ${(job as any).customerCity}` : ""}
+              </p>
+            )}
             <p className="text-slate-500 text-xs sm:text-sm font-medium uppercase tracking-wider mb-3">
               {job.serviceType.replace(/_/g, ' ')}
             </p>
 
             {/* Rep notes from canvasser */}
-            {job.repNotes && (
+            {(job as any).repNotes && (
               <div className="flex gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-3">
                 <MessageSquare className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
                 <div>
                   <span className="text-xs font-bold text-amber-600 uppercase tracking-wider block mb-0.5">Rep Note</span>
-                  <p className="text-xs text-amber-800 leading-relaxed">{job.repNotes}</p>
+                  <p className="text-xs text-amber-800 leading-relaxed">{(job as any).repNotes}</p>
                 </div>
               </div>
             )}
@@ -217,19 +241,40 @@ export default function JobsPage() {
             )}
 
             <div className="mt-auto space-y-2 sm:space-y-3 pt-3 sm:pt-4 border-t border-slate-100">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Scheduled:</span>
-                <span className="font-bold text-slate-700">{formatDate(job.scheduledAt)}</span>
-              </div>
+              {(job.status as string) !== 'needs_scheduling' && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Scheduled:</span>
+                  <span className="font-bold text-slate-700">{formatDate(job.scheduledAt)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Technician:</span>
                 <span className="font-bold text-slate-700">{job.technicianAssigned || 'Unassigned'}</span>
               </div>
-              {job.status === 'completed' && job.paymentAmountCollected && (
+              {job.status === 'completed' && (job as any).paymentAmountCollected && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Collected:</span>
-                  <span className="font-bold text-emerald-600">{formatCurrency(job.paymentAmountCollected)}</span>
+                  <span className="font-bold text-emerald-600">{formatCurrency((job as any).paymentAmountCollected)}</span>
                 </div>
+              )}
+
+              {(job.status as string) === 'needs_scheduling' && (
+                <Button
+                  className="w-full mt-2"
+                  onClick={() => setSchedulingJob({
+                    id: job.id,
+                    leadId: (job as any).leadId ?? null,
+                    customerFirstName: (job as any).customerFirstName ?? null,
+                    customerLastName: (job as any).customerLastName ?? null,
+                    customerAddress: (job as any).customerAddress ?? null,
+                    customerCity: (job as any).customerCity ?? null,
+                    serviceType: job.serviceType,
+                    soldPrice: (job as any).soldPrice ?? null,
+                  })}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Set Schedule
+                </Button>
               )}
 
               {job.status === 'scheduled' && (
@@ -264,6 +309,13 @@ export default function JobsPage() {
         <ScheduleModal
           sale={schedulingLead}
           onClose={() => setSchedulingLead(null)}
+        />
+      )}
+
+      {schedulingJob && (
+        <ScheduleJobModal
+          job={schedulingJob}
+          onClose={() => setSchedulingJob(null)}
         />
       )}
     </div>
@@ -354,6 +406,103 @@ function ScheduleModal({ sale, onClose }: { sale: PendingSale; onClose: () => vo
           </div>
         </div>
       )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Scheduled Date *</Label>
+            <Input type="date" name="scheduledAt" required />
+          </div>
+          <div>
+            <Label>Assign Technician</Label>
+            <Select name="technicianAssigned">
+              <option value="">Unassigned</option>
+              {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label>Scheduler Notes</Label>
+          <Input name="notes" placeholder="e.g. morning only, side gate, prefers call ahead..." />
+        </div>
+        <div className="pt-2 flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" isLoading={scheduleMutation.isPending}>
+            <Calendar className="w-4 h-4 mr-2" />
+            Confirm Schedule
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ScheduleJobModal({ job, onClose }: { job: SchedulingJob; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (data: { scheduledAt: string; technicianAssigned: string; notes?: string }) => {
+      // Prefer from-lead (syncs lead_details.job_id → clears pending-sales queue)
+      const url = job.leadId
+        ? `/api/jobs/from-lead/${job.leadId}`
+        : `/api/jobs/${job.id}`;
+      const method = job.leadId ? "POST" : "PUT";
+      const body = job.leadId ? data : { ...data, status: "scheduled" };
+
+      const r = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as any).error || "Failed to schedule job");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs/pending-sales"] });
+      toast({ title: "Job scheduled!", description: `${job.customerFirstName ?? ""} ${job.customerLastName ?? ""}`.trim() + " added to pipeline." });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    scheduleMutation.mutate({
+      scheduledAt: fd.get("scheduledAt") as string,
+      technicianAssigned: (fd.get("technicianAssigned") as string) || "",
+      notes: (fd.get("notes") as string) || undefined,
+    });
+  };
+
+  const customerName = `${job.customerFirstName ?? ""} ${job.customerLastName ?? ""}`.trim() || "Unknown";
+
+  return (
+    <Modal isOpen onClose={onClose} title="Set Schedule">
+      <div className="mb-4 p-4 bg-slate-50 rounded-xl space-y-1">
+        <p className="font-bold text-slate-900">{customerName}</p>
+        {job.customerAddress && (
+          <p className="text-sm text-slate-600">{job.customerAddress}{job.customerCity ? `, ${job.customerCity}` : ""}</p>
+        )}
+        <div className="flex items-center gap-3 pt-1">
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+            {job.serviceType.replace(/_/g, " ")}
+          </span>
+          {job.soldPrice && (
+            <span className="flex items-center gap-1 text-sm font-bold text-emerald-700 ml-auto">
+              <DollarSign className="w-3.5 h-3.5" />
+              {formatCurrency(job.soldPrice)}
+            </span>
+          )}
+        </div>
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">

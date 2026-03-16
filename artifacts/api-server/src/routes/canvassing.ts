@@ -146,6 +146,68 @@ async function upsertLeadMeta(leadId: string, data: Record<string, any>) {
   }
 }
 
+/**
+ * Auto-create an hh_customers + needs_scheduling hh_jobs record for a sold lead.
+ * Called when a lead's status transitions to "sold".
+ * Does NOT set lead_details.job_id — the "Schedule Job" flow on the Jobs page
+ * will do that when the user confirms a date/technician.
+ * Idempotent: skips silently if a job already exists for this lead.
+ */
+async function autoConvertSoldLead(
+  leadId: string,
+  lead: Record<string, any>,
+  details: Record<string, any> | null,
+) {
+  // Skip if any job already linked to this lead
+  const existing = await db
+    .select({ id: jobsTable.id })
+    .from(jobsTable)
+    .where(eq(jobsTable.leadId, leadId));
+  if (existing.length > 0) return;
+
+  const name = (lead.homeownerName as string | null) ?? "";
+  const spaceIdx = name.indexOf(" ");
+  const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : (name || "Unknown");
+  const lastName = spaceIdx >= 0 ? name.slice(spaceIdx + 1) : "";
+
+  const servicesArr = Array.isArray(lead.servicesInterested)
+    ? lead.servicesInterested
+    : [];
+  const serviceType =
+    (details as any)?.servicePackage ??
+    servicesArr[0] ??
+    "house_wash";
+
+  const [customer] = await db.insert(customersTable).values({
+    firstName: firstName || "Unknown",
+    lastName: lastName || "",
+    phone: lead.phone ?? null,
+    email: lead.email ?? null,
+    address: lead.addressLine1 ?? null,
+    city: lead.city ?? null,
+    state: lead.state ?? null,
+    zip: lead.zip ?? null,
+    notes: null,
+    optOut: false,
+    reviewCampaignEligible: false,
+  }).returning();
+
+  const [job] = await db.insert(jobsTable).values({
+    customerId: customer.id,
+    serviceType,
+    soldPrice: (details as any)?.soldPrice ?? null,
+    quotedPrice: (details as any)?.quotePrice ?? null,
+    status: "needs_scheduling",
+    scheduledAt: null,
+    technicianAssigned: null,
+    paymentStatus: "pending",
+    leadId,
+    notes: null,
+  }).returning();
+
+  await db.insert(jobContentTable).values({ jobId: job.id }).onConflictDoNothing();
+}
+
 // ---------------------------------------------------------------------------
 // Canvassing Sessions
 // ---------------------------------------------------------------------------
@@ -448,6 +510,14 @@ router.put("/leads/:id", async (req, res) => {
       updatedBy,
       changeLog: [...existingLog, newEntry],
     });
+
+    // 9. Auto-convert to customer when status becomes "sold"
+    const finalStatus = leadUpdate.status ?? row.lead.status;
+    if (finalStatus === "sold") {
+      autoConvertSoldLead(req.params.id, updatedLead, updatedDetails).catch(err =>
+        console.error("[autoConvert] failed for lead", req.params.id, err)
+      );
+    }
 
     res.json(dbToExternal(updatedLead, updatedDetails, updatedMeta));
   } catch (err) {
