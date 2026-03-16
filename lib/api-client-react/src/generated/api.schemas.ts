@@ -84,15 +84,6 @@ export interface CreateCanvassingSession {
   notes?: string | null;
 }
 
-export type LeadSource = (typeof LeadSource)[keyof typeof LeadSource] | null;
-
-export const LeadSource = {
-  d2d: "d2d",
-  referral: "referral",
-  ad: "ad",
-  other: "other",
-} as const;
-
 export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
 
 export const LeadStatus = {
@@ -104,7 +95,7 @@ export const LeadStatus = {
 } as const;
 
 export interface Lead {
-  id: number;
+  id: string;
   firstName: string;
   lastName: string;
   phone?: string | null;
@@ -113,29 +104,17 @@ export interface Lead {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
-  source?: LeadSource;
+  source?: string | null;
+  businessUnit?: string | null;
   canvasser?: string | null;
-  quoteAmount?: string | null;
   serviceInterest?: string | null;
   status: LeadStatus;
   followUpDate?: string | null;
+  doNotKnock?: boolean | null;
   notes?: string | null;
-  sessionId?: number | null;
-  convertedToCustomerId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
-
-export type CreateLeadSource =
-  | (typeof CreateLeadSource)[keyof typeof CreateLeadSource]
-  | null;
-
-export const CreateLeadSource = {
-  d2d: "d2d",
-  referral: "referral",
-  ad: "ad",
-  other: "other",
-} as const;
 
 export type CreateLeadStatus =
   (typeof CreateLeadStatus)[keyof typeof CreateLeadStatus];
@@ -157,14 +136,13 @@ export interface CreateLead {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
-  source?: CreateLeadSource;
+  source?: string | null;
   canvasser?: string | null;
-  quoteAmount?: string | null;
   serviceInterest?: string | null;
   status?: CreateLeadStatus;
   followUpDate?: string | null;
+  doNotKnock?: boolean | null;
   notes?: string | null;
-  sessionId?: number | null;
 }
 
 export interface Customer {

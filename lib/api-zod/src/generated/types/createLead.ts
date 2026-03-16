@@ -5,7 +5,6 @@
  * Healthy Home Operating System API
  * OpenAPI spec version: 0.2.0
  */
-import type { CreateLeadSource } from "./createLeadSource";
 import type { CreateLeadStatus } from "./createLeadStatus";
 
 export interface CreateLead {
@@ -17,12 +16,11 @@ export interface CreateLead {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
-  source?: CreateLeadSource;
+  source?: string | null;
   canvasser?: string | null;
-  quoteAmount?: string | null;
   serviceInterest?: string | null;
   status?: CreateLeadStatus;
   followUpDate?: string | null;
+  doNotKnock?: boolean | null;
   notes?: string | null;
-  sessionId?: number | null;
 }

@@ -12,7 +12,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const dailyReportsTable = pgTable("daily_reports", {
+export const dailyReportsTable = pgTable("hh_daily_reports", {
   id: serial("id").primaryKey(),
   reportDate: date("report_date").notNull().unique(),
   doorsKnocked: integer("doors_knocked").notNull().default(0),

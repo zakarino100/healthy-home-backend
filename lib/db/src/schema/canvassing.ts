@@ -7,27 +7,16 @@ import {
   date,
   timestamp,
   boolean,
-  pgEnum,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 
-export const leadStatusEnum = pgEnum("lead_status", [
-  "new",
-  "quoted",
-  "follow_up",
-  "sold",
-  "lost",
-]);
-
-export const leadSourceEnum = pgEnum("lead_source_type", [
-  "d2d",
-  "referral",
-  "ad",
-  "other",
-]);
-
-export const canvassingSessionsTable = pgTable("canvassing_sessions", {
+// ---------------------------------------------------------------------------
+// hh_canvassing_sessions  — Healthy Home canvassing sessions
+// ---------------------------------------------------------------------------
+export const hhCanvassingSessionsTable = pgTable("hh_canvassing_sessions", {
   id: serial("id").primaryKey(),
   canvasser: text("canvasser").notNull(),
   sessionDate: date("session_date").notNull(),
@@ -47,35 +36,47 @@ export const canvassingSessionsTable = pgTable("canvassing_sessions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertCanvassingSessionSchema = createInsertSchema(canvassingSessionsTable).omit({
+export const insertCanvassingSessionSchema = createInsertSchema(hhCanvassingSessionsTable).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 export type InsertCanvassingSession = z.infer<typeof insertCanvassingSessionSchema>;
-export type CanvassingSession = typeof canvassingSessionsTable.$inferSelect;
+export type CanvassingSession = typeof hhCanvassingSessionsTable.$inferSelect;
 
+// Aliases kept for backward compat with routes that import canvassingSessionsTable
+export const canvassingSessionsTable = hhCanvassingSessionsTable;
+
+// ---------------------------------------------------------------------------
+// leads  — shared table with Wolfpack D2D app (existing Supabase table)
+// Filter by: business_unit = 'healthy_home'
+// New HH records: source = 'crm', business_unit = 'healthy_home'
+// ---------------------------------------------------------------------------
 export const leadsTable = pgTable("leads", {
-  id: serial("id").primaryKey(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull().default(""),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  homeownerName: text("homeowner_name"),
   phone: text("phone"),
   email: text("email"),
-  address: text("address"),
+  addressLine1: text("address_line1").notNull().default(""),
   city: text("city"),
   state: text("state"),
   zip: text("zip"),
-  source: leadSourceEnum("source").default("d2d"),
-  canvasser: text("canvasser"),
-  quoteAmount: numeric("quote_amount", { precision: 10, scale: 2 }),
-  serviceInterest: text("service_interest"),
-  status: leadStatusEnum("status").notNull().default("new"),
-  followUpDate: date("follow_up_date"),
-  notes: text("notes"),
-  sessionId: integer("session_id").references(() => canvassingSessionsTable.id),
-  convertedToCustomerId: integer("converted_to_customer_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  latitude: numeric("latitude"),
+  longitude: numeric("longitude"),
+  source: text("source").default("crm"),
+  businessUnit: text("business_unit").default("healthy_home"),
+  servicesInterested: text("services_interested").array(),
+  tags: text("tags").array(),
+  status: text("status").notNull().default("new"),
+  assignedRepEmail: text("assigned_rep_email"),
+  lastTouchAt: timestamp("last_touch_at", { withTimezone: true }),
+  nextFollowupAt: timestamp("next_followup_at", { withTimezone: true }),
+  followupChannel: text("followup_channel"),
+  followupPriority: text("followup_priority"),
+  doNotKnock: boolean("do_not_knock").default(false),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({

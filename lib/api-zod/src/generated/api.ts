@@ -249,7 +249,7 @@ export const ListLeadsQueryParams = zod.object({
 });
 
 export const ListLeadsResponseItem = zod.object({
-  id: zod.number(),
+  id: zod.string().uuid(),
   firstName: zod.string(),
   lastName: zod.string(),
   phone: zod.string().nullish(),
@@ -258,15 +258,14 @@ export const ListLeadsResponseItem = zod.object({
   city: zod.string().nullish(),
   state: zod.string().nullish(),
   zip: zod.string().nullish(),
-  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
+  source: zod.string().nullish(),
+  businessUnit: zod.string().nullish(),
   canvasser: zod.string().nullish(),
-  quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]),
   followUpDate: zod.string().nullish(),
+  doNotKnock: zod.boolean().nullish(),
   notes: zod.string().nullish(),
-  sessionId: zod.number().nullish(),
-  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -284,14 +283,13 @@ export const CreateLeadBody = zod.object({
   city: zod.string().nullish(),
   state: zod.string().nullish(),
   zip: zod.string().nullish(),
-  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
+  source: zod.string().nullish(),
   canvasser: zod.string().nullish(),
-  quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]).optional(),
   followUpDate: zod.string().nullish(),
+  doNotKnock: zod.boolean().nullish(),
   notes: zod.string().nullish(),
-  sessionId: zod.number().nullish(),
 });
 
 /**
@@ -302,7 +300,7 @@ export const GetLeadParams = zod.object({
 });
 
 export const GetLeadResponse = zod.object({
-  id: zod.number(),
+  id: zod.string().uuid(),
   firstName: zod.string(),
   lastName: zod.string(),
   phone: zod.string().nullish(),
@@ -311,15 +309,14 @@ export const GetLeadResponse = zod.object({
   city: zod.string().nullish(),
   state: zod.string().nullish(),
   zip: zod.string().nullish(),
-  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
+  source: zod.string().nullish(),
+  businessUnit: zod.string().nullish(),
   canvasser: zod.string().nullish(),
-  quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]),
   followUpDate: zod.string().nullish(),
+  doNotKnock: zod.boolean().nullish(),
   notes: zod.string().nullish(),
-  sessionId: zod.number().nullish(),
-  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -340,18 +337,17 @@ export const UpdateLeadBody = zod.object({
   city: zod.string().nullish(),
   state: zod.string().nullish(),
   zip: zod.string().nullish(),
-  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
+  source: zod.string().nullish(),
   canvasser: zod.string().nullish(),
-  quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]).optional(),
   followUpDate: zod.string().nullish(),
+  doNotKnock: zod.boolean().nullish(),
   notes: zod.string().nullish(),
-  sessionId: zod.number().nullish(),
 });
 
 export const UpdateLeadResponse = zod.object({
-  id: zod.number(),
+  id: zod.string().uuid(),
   firstName: zod.string(),
   lastName: zod.string(),
   phone: zod.string().nullish(),
@@ -360,15 +356,14 @@ export const UpdateLeadResponse = zod.object({
   city: zod.string().nullish(),
   state: zod.string().nullish(),
   zip: zod.string().nullish(),
-  source: zod.enum(["d2d", "referral", "ad", "other"]).nullish(),
+  source: zod.string().nullish(),
+  businessUnit: zod.string().nullish(),
   canvasser: zod.string().nullish(),
-  quoteAmount: zod.string().nullish(),
   serviceInterest: zod.string().nullish(),
   status: zod.enum(["new", "quoted", "follow_up", "sold", "lost"]),
   followUpDate: zod.string().nullish(),
+  doNotKnock: zod.boolean().nullish(),
   notes: zod.string().nullish(),
-  sessionId: zod.number().nullish(),
-  convertedToCustomerId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

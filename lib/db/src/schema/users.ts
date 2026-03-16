@@ -4,22 +4,15 @@ import {
   text,
   boolean,
   timestamp,
-  pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const userRoleEnum = pgEnum("user_role", [
-  "admin",
-  "canvasser",
-  "technician",
-]);
-
-export const usersTable = pgTable("users", {
+export const usersTable = pgTable("hh_users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").unique(),
-  role: userRoleEnum("role").notNull().default("canvasser"),
+  role: text("role").notNull().default("canvasser"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

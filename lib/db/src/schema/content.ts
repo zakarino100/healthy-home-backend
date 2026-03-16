@@ -10,7 +10,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { jobsTable } from "./jobs";
 
-export const jobContentTable = pgTable("job_content", {
+export const jobContentTable = pgTable("hh_job_content", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id")
     .notNull()

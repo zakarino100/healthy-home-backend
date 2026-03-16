@@ -8,7 +8,7 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const customersTable = pgTable("customers", {
+export const customersTable = pgTable("hh_customers", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),

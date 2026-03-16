@@ -1042,7 +1042,8 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         firstName:
           type: string
         lastName:
@@ -1067,12 +1068,11 @@ components:
           nullable: true
         source:
           type: string
-          enum: [d2d, referral, ad, other]
           nullable: true
-        canvasser:
+        businessUnit:
           type: string
           nullable: true
-        quoteAmount:
+        canvasser:
           type: string
           nullable: true
         serviceInterest:
@@ -1084,14 +1084,11 @@ components:
         followUpDate:
           type: string
           nullable: true
+        doNotKnock:
+          type: boolean
+          nullable: true
         notes:
           type: string
-          nullable: true
-        sessionId:
-          type: integer
-          nullable: true
-        convertedToCustomerId:
-          type: integer
           nullable: true
         createdAt:
           type: string
@@ -1132,12 +1129,8 @@ components:
           nullable: true
         source:
           type: string
-          enum: [d2d, referral, ad, other]
           nullable: true
         canvasser:
-          type: string
-          nullable: true
-        quoteAmount:
           type: string
           nullable: true
         serviceInterest:
@@ -1149,11 +1142,11 @@ components:
         followUpDate:
           type: string
           nullable: true
+        doNotKnock:
+          type: boolean
+          nullable: true
         notes:
           type: string
-          nullable: true
-        sessionId:
-          type: integer
           nullable: true
       required:
         - firstName

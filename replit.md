@@ -31,16 +31,43 @@ artifacts-monorepo/
 │   └── db/                 # Drizzle ORM schema + DB connection
 ```
 
-## Database Schema (lib/db/src/schema/)
+## Database
 
-- **users** — Team members with roles (admin/canvasser/technician), soft-deletable
-- **canvassing_sessions** — D2D session records per canvasser per day
-- **leads** — Lead records with firstName/lastName, source (d2d/referral/ad/other), city/state/zip, status flow (new→quoted→follow_up→sold→lost), convertedToCustomerId
-- **customers** — Customer master record with optOut + reviewCampaignEligible
-- **jobs** — Job scheduling and fulfillment (scheduled→completed/rescheduled/canceled)
-- **review_workflows** — Post-job satisfaction routing (score ≥ 4 → Google review link, score < 4 → internal feedback + issue flag). Has deliveryChannel, deliveryStatus, deliveryLog fields
-- **job_content** — Before/after photos, video capture, content-ready flag (auto-created with each job)
-- **daily_reports** — Persisted daily report with full Robin-payload JSON (snake_case format)
+**Primary DB**: Supabase (project `hclpovktywijfnswthpm`, pooler: `aws-1-us-east-1.pooler.supabase.com:6543`).  
+Connection string stored in `SUPABASE_DATABASE_URL` env var; `lib/db/src/index.ts` prefers it over the local `DATABASE_URL`.
+
+**CRITICAL — Shared Supabase project**: The Wolfpack D2D app uses the same Supabase instance. The following tables contain LIVE PRODUCTION DATA and must **never** be altered, dropped, or have new columns/rows written by Healthy Home code:
+`leads` (read + hh_filter-write only), `pins`, `d2d_touches`, `d2d_quotes`, `d2d_media`, `d2d_services`, `crm_activity`, `call_logs`, `conversations`, `automation_rules`, `message_*`, `nurture_*`, `voice_settings`
+
+### Schema (lib/db/src/schema/)
+
+| Drizzle file | Supabase table | Notes |
+|---|---|---|
+| `canvassing.ts` → `leadsTable` | **`leads`** (shared) | Read/write with `WHERE business_unit='healthy_home'`; new records get `source='crm'` |
+| `canvassing.ts` → `hhCanvassingSessionsTable` | `hh_canvassing_sessions` | HH-only canvassing sessions |
+| `customers.ts` | `hh_customers` | HH customer master records |
+| `jobs.ts` | `hh_jobs` | Job scheduling + fulfillment |
+| `reviews.ts` | `hh_review_workflows` | Post-job satisfaction + review routing |
+| `content.ts` | `hh_job_content` | Before/after photos, video |
+| `reports.ts` | `hh_daily_reports` | Persisted daily report + Robin payload |
+| `users.ts` | `hh_users` | HH team members |
+
+All `hh_*` tables use **TEXT** fields for status/enum columns (no pgEnum) to avoid conflicts with the live DB's existing enum types.
+
+### leads table mapping (API boundary)
+
+| External API field | DB column (`leads`) |
+|---|---|
+| `firstName` + `lastName` | `homeowner_name` (join/split on first space) |
+| `address` | `address_line1` |
+| `canvasser` | `assigned_rep_email` |
+| `serviceInterest` | `services_interested[0]` |
+| `followUpDate` | `next_followup_at` |
+| `id` | `id` (UUID, not integer) |
+
+### Schema changes
+
+For any new `hh_*` table: create via direct SQL (executeSql tool), then add Drizzle schema to match. Do NOT use `drizzle-kit push` — it may attempt to alter existing Wolfpack tables.
 
 ## API Routes (artifacts/api-server/src/routes/)
 

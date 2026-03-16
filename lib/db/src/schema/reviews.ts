@@ -5,39 +5,13 @@ import {
   text,
   boolean,
   timestamp,
-  pgEnum,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { jobsTable } from "./jobs";
 import { customersTable } from "./customers";
 
-export const reviewWorkflowStatusEnum = pgEnum("review_workflow_status", [
-  "pending",
-  "satisfaction_sent",
-  "satisfaction_responded",
-  "review_link_sent",
-  "review_completed",
-  "feedback_requested",
-  "issue_flagged",
-  "resolved",
-]);
-
-export const deliveryChannelEnum = pgEnum("delivery_channel", [
-  "sms",
-  "email",
-  "manual",
-  "unknown",
-]);
-
-export const deliveryStatusEnum = pgEnum("delivery_status", [
-  "pending",
-  "sent",
-  "failed",
-  "skipped",
-]);
-
-export const reviewWorkflowsTable = pgTable("review_workflows", {
+export const reviewWorkflowsTable = pgTable("hh_review_workflows", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id")
     .notNull()
@@ -45,7 +19,7 @@ export const reviewWorkflowsTable = pgTable("review_workflows", {
   customerId: integer("customer_id")
     .notNull()
     .references(() => customersTable.id),
-  status: reviewWorkflowStatusEnum("status").notNull().default("pending"),
+  status: text("status").notNull().default("pending"),
   satisfactionScore: integer("satisfaction_score"),
   satisfactionResponseAt: timestamp("satisfaction_response_at"),
   satisfactionSentAt: timestamp("satisfaction_sent_at"),
@@ -57,8 +31,8 @@ export const reviewWorkflowsTable = pgTable("review_workflows", {
   isIssueFlagged: boolean("is_issue_flagged").notNull().default(false),
   internalIssueNotes: text("internal_issue_notes"),
   isOldCustomerCampaign: boolean("is_old_customer_campaign").notNull().default(false),
-  deliveryChannel: deliveryChannelEnum("delivery_channel").notNull().default("unknown"),
-  deliveryStatus: deliveryStatusEnum("delivery_status").notNull().default("pending"),
+  deliveryChannel: text("delivery_channel").notNull().default("unknown"),
+  deliveryStatus: text("delivery_status").notNull().default("pending"),
   deliveryLog: text("delivery_log"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
