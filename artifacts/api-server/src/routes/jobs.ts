@@ -7,6 +7,7 @@ import {
   customersTable,
   leadsTable,
   leadDetailsTable,
+  leadMetaTable,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, isNull, or } from "drizzle-orm";
 
@@ -137,10 +138,12 @@ router.get("/pending-sales", async (req, res) => {
       })
       .from(leadsTable)
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadMetaTable, eq(leadMetaTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.status, "sold"),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
         isNull(leadDetailsTable.jobId),
+        or(isNull(leadMetaTable.leadId), eq(leadMetaTable.isDeleted, false))!,
       ))
       .orderBy(leadsTable.createdAt);
 
