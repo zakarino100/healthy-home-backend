@@ -5,11 +5,12 @@ import {
   canvassingRoutesTable,
   leadsTable,
   leadDetailsTable,
+  leadMetaTable,
   customersTable,
   jobsTable,
   jobContentTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, or, isNull, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -59,8 +60,12 @@ function externalToDetailsDb(body: Record<string, any>) {
   };
 }
 
-/** DB row + joined details → external API shape */
-function dbToExternal(lead: Record<string, any>, details?: Record<string, any> | null) {
+/** DB row + joined details (+ optional meta) → external API shape */
+function dbToExternal(
+  lead: Record<string, any>,
+  details?: Record<string, any> | null,
+  meta?: Record<string, any> | null,
+) {
   const name = lead.homeownerName ?? "";
   const spaceIdx = name.indexOf(" ");
   const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name;
@@ -94,9 +99,15 @@ function dbToExternal(lead: Record<string, any>, details?: Record<string, any> |
     isBundle: details?.isBundle ?? false,
     hasJobScheduled: details?.jobId != null,
     scheduledJobId: details?.jobId ?? null,
-    notes: null,
+    notes: details?.notes ?? null,
     createdAt: lead.createdAt,
     updatedAt: lead.updatedAt,
+    // Audit / soft-delete from hh_lead_meta
+    isDeleted: meta?.isDeleted ?? false,
+    deletedAt: meta?.deletedAt ?? null,
+    deletedBy: meta?.deletedBy ?? null,
+    updatedBy: meta?.updatedBy ?? null,
+    changeLog: (meta?.changeLog as any[]) ?? [],
   };
 }
 
@@ -113,6 +124,23 @@ async function upsertLeadDetails(leadId: string, detailsData: Record<string, any
   } else {
     const [created] = await db.insert(leadDetailsTable)
       .values({ leadId, ...detailsData })
+      .returning();
+    return created;
+  }
+}
+
+/** Upsert hh_lead_meta for a given leadId */
+async function upsertLeadMeta(leadId: string, data: Record<string, any>) {
+  const existing = await db.select().from(leadMetaTable).where(eq(leadMetaTable.leadId, leadId));
+  if (existing.length > 0) {
+    const [updated] = await db.update(leadMetaTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(leadMetaTable.leadId, leadId))
+      .returning();
+    return updated;
+  } else {
+    const [created] = await db.insert(leadMetaTable)
+      .values({ leadId, ...data })
       .returning();
     return created;
   }
@@ -244,6 +272,8 @@ router.get("/leads", async (req, res) => {
     const { status, canvasser, source } = req.query as Record<string, string | undefined>;
     const conditions: ReturnType<typeof eq>[] = [
       eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+      // Exclude soft-deleted leads (meta row absent = not deleted; present with is_deleted=true = excluded)
+      or(isNull(leadMetaTable.leadId), eq(leadMetaTable.isDeleted, false))!,
     ];
     if (status) conditions.push(eq(leadsTable.status, status));
     if (canvasser) conditions.push(eq(leadsTable.assignedRepEmail, canvasser));
@@ -253,13 +283,15 @@ router.get("/leads", async (req, res) => {
       .select({
         lead: leadsTable,
         details: leadDetailsTable,
+        meta: leadMetaTable,
       })
       .from(leadsTable)
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadMetaTable, eq(leadMetaTable.leadId, leadsTable.id))
       .where(and(...conditions))
       .orderBy(leadsTable.createdAt);
 
-    res.json(rows.map(r => dbToExternal(r.lead, r.details)));
+    res.json(rows.map(r => dbToExternal(r.lead, r.details, r.meta)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -284,15 +316,38 @@ router.post("/leads", async (req, res) => {
 router.get("/leads/:id", async (req, res) => {
   try {
     const [row] = await db
-      .select({ lead: leadsTable, details: leadDetailsTable })
+      .select({ lead: leadsTable, details: leadDetailsTable, meta: leadMetaTable })
       .from(leadsTable)
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadMetaTable, eq(leadMetaTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.id, req.params.id),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       ));
     if (!row) return res.status(404).json({ error: "Lead not found" });
-    res.json(dbToExternal(row.lead, row.details));
+    if (row.meta?.isDeleted) return res.status(404).json({ error: "Lead not found" });
+
+    // Linked jobs
+    const linkedJobs = await db
+      .select()
+      .from(jobsTable)
+      .where(eq(jobsTable.leadId, row.lead.id));
+
+    // Linked customer (via first job)
+    let linkedCustomer = null;
+    if (linkedJobs.length > 0 && linkedJobs[0].customerId) {
+      const [cust] = await db
+        .select()
+        .from(customersTable)
+        .where(eq(customersTable.id, linkedJobs[0].customerId));
+      linkedCustomer = cust ?? null;
+    }
+
+    res.json({
+      ...dbToExternal(row.lead, row.details, row.meta),
+      linkedCustomer,
+      linkedJobs,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -301,20 +356,100 @@ router.get("/leads/:id", async (req, res) => {
 
 router.put("/leads/:id", async (req, res) => {
   try {
-    const leadValues = externalToLeadDb(req.body);
-    const detailsData = externalToDetailsDb(req.body);
-
-    const [lead] = await db.update(leadsTable)
-      .set({ ...leadValues, updatedAt: new Date() })
+    // 1. Fetch current state
+    const [row] = await db
+      .select({ lead: leadsTable, details: leadDetailsTable, meta: leadMetaTable })
+      .from(leadsTable)
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadMetaTable, eq(leadMetaTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.id, req.params.id),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
-      ))
-      .returning();
-    if (!lead) return res.status(404).json({ error: "Lead not found" });
+      ));
+    if (!row) return res.status(404).json({ error: "Lead not found" });
+    if (row.meta?.isDeleted) return res.status(404).json({ error: "Lead not found" });
 
-    const details = await upsertLeadDetails(lead.id, detailsData);
-    res.json(dbToExternal(lead, details));
+    // 2. Allowlist — only accept these external field names
+    const EDITABLE_FIELDS = [
+      "firstName", "lastName", "phone", "email",
+      "address", "city", "state", "zip",
+      "serviceInterest", "quoteAmount", "status",
+      "followUpDate", "notes",
+    ];
+    const incoming: Record<string, any> = {};
+    for (const field of EDITABLE_FIELDS) {
+      if (req.body[field] !== undefined) incoming[field] = req.body[field];
+    }
+
+    // 3. Compute changeset against current external shape
+    const current = dbToExternal(row.lead, row.details, row.meta);
+    const changedFields: Record<string, { from: any; to: any }> = {};
+    for (const [field, newVal] of Object.entries(incoming)) {
+      const oldVal = (current as Record<string, any>)[field] ?? null;
+      const oldStr = oldVal === null || oldVal === undefined ? "" : String(oldVal);
+      const newStr = newVal === null || newVal === undefined ? "" : String(newVal);
+      if (oldStr !== newStr) {
+        changedFields[field] = { from: oldVal ?? null, to: newVal };
+      }
+    }
+
+    // 4. Nothing changed — return as-is
+    if (Object.keys(changedFields).length === 0) {
+      return res.json(current);
+    }
+
+    // 5. Build DB update maps
+    const leadUpdate: Record<string, any> = {};
+    const detailsUpdate: Record<string, any> = {};
+
+    if ("firstName" in incoming || "lastName" in incoming) {
+      const fn = ("firstName" in incoming ? incoming.firstName : current.firstName) ?? "";
+      const ln = ("lastName" in incoming ? incoming.lastName : current.lastName) ?? "";
+      leadUpdate.homeownerName = [fn, ln].filter(Boolean).join(" ");
+    }
+    if ("phone" in incoming) leadUpdate.phone = incoming.phone;
+    if ("email" in incoming) leadUpdate.email = incoming.email;
+    if ("address" in incoming) leadUpdate.addressLine1 = incoming.address;
+    if ("city" in incoming) leadUpdate.city = incoming.city;
+    if ("state" in incoming) leadUpdate.state = incoming.state;
+    if ("zip" in incoming) leadUpdate.zip = incoming.zip;
+    if ("serviceInterest" in incoming) leadUpdate.servicesInterested = incoming.serviceInterest ? [incoming.serviceInterest] : null;
+    if ("status" in incoming) leadUpdate.status = incoming.status;
+    if ("followUpDate" in incoming) leadUpdate.nextFollowupAt = incoming.followUpDate ? new Date(incoming.followUpDate) : null;
+    if ("quoteAmount" in incoming) detailsUpdate.quotePrice = incoming.quoteAmount;
+    if ("notes" in incoming) detailsUpdate.notes = incoming.notes;
+
+    // 6. Persist lead table changes
+    let updatedLead = row.lead;
+    if (Object.keys(leadUpdate).length > 0) {
+      const [updated] = await db.update(leadsTable)
+        .set({ ...leadUpdate, updatedAt: new Date() })
+        .where(and(eq(leadsTable.id, req.params.id), eq(leadsTable.businessUnit, HH_BUSINESS_UNIT)))
+        .returning();
+      updatedLead = updated;
+    }
+
+    // 7. Persist details changes
+    let updatedDetails = row.details;
+    if (Object.keys(detailsUpdate).length > 0) {
+      updatedDetails = await upsertLeadDetails(req.params.id, detailsUpdate);
+    }
+
+    // 8. Append changelog entry and update meta
+    const updatedBy = req.body.updatedBy ?? "system";
+    const newEntry = {
+      changedAt: new Date().toISOString(),
+      changedBy: updatedBy,
+      changedByName: req.body.updatedByName ?? updatedBy,
+      fields: changedFields,
+    };
+    const existingLog = (row.meta?.changeLog as any[]) ?? [];
+    const updatedMeta = await upsertLeadMeta(req.params.id, {
+      updatedBy,
+      changeLog: [...existingLog, newEntry],
+    });
+
+    res.json(dbToExternal(updatedLead, updatedDetails, updatedMeta));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -323,14 +458,27 @@ router.put("/leads/:id", async (req, res) => {
 
 router.delete("/leads/:id", async (req, res) => {
   try {
-    const deleted = await db.delete(leadsTable)
-      .where(and(
-        eq(leadsTable.id, req.params.id),
-        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
-      ))
-      .returning();
-    if (!deleted.length) return res.status(404).json({ error: "Lead not found" });
-    res.json({ message: "Deleted successfully" });
+    // Verify lead exists and belongs to HH
+    const [lead] = await db
+      .select({ id: leadsTable.id })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.id, req.params.id), eq(leadsTable.businessUnit, HH_BUSINESS_UNIT)));
+    if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+    // Check current meta — idempotent if already deleted
+    const [existing] = await db.select().from(leadMetaTable).where(eq(leadMetaTable.leadId, req.params.id));
+    if (existing?.isDeleted) {
+      return res.json({ success: true, message: "Lead deleted." });
+    }
+
+    // Soft delete — upsert meta row
+    await upsertLeadMeta(req.params.id, {
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: req.body?.deletedBy ?? "system",
+    });
+
+    res.json({ success: true, message: "Lead deleted." });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

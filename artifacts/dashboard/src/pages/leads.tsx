@@ -9,6 +9,9 @@ import { MapPin, Phone, User, TrendingUp, Filter, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateLead } from "@workspace/api-client-react";
+import LeadDrawer, { type LeadDetail } from "@/components/LeadDrawer";
+
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type Source = "d2d" | "referral" | "ad" | "other";
 type Status = "new" | "quoted" | "follow_up" | "sold" | "lost" | "no_answer" | "not_home" | "not_interested" | "contacted" | "completed";
@@ -67,6 +70,44 @@ export default function LeadsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Drawer state
+  const [selectedLead, setSelectedLead] = useState<LeadDetail | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+
+  // Track optimistic local state so list updates instantly (no loading flash)
+  const [localDeleted, setLocalDeleted] = useState<Set<string>>(new Set());
+  const [localUpdated, setLocalUpdated] = useState<Map<string, Partial<LeadDetail>>>(new Map());
+
+  async function handleLeadClick(lead: any) {
+    setSelectedLead(lead as LeadDetail);
+    setDrawerOpen(true);
+    setDrawerLoading(true);
+    setDrawerError(null);
+    try {
+      const res = await fetch(`${API}/api/canvassing/leads/${lead.id}`);
+      if (!res.ok) throw new Error("Failed to load lead");
+      const full = await res.json();
+      setSelectedLead(full as LeadDetail);
+    } catch {
+      setDrawerError("Could not load lead detail. Please try again.");
+    } finally {
+      setDrawerLoading(false);
+    }
+  }
+
+  function handleLeadUpdated(updated: LeadDetail) {
+    setSelectedLead(updated);
+    setLocalUpdated(prev => new Map(prev).set(updated.id, updated));
+  }
+
+  function handleLeadDeleted(deletedId: string) {
+    setLocalDeleted(prev => new Set(prev).add(deletedId));
+    setDrawerOpen(false);
+    setSelectedLead(null);
+  }
+
   const { data: leads, isLoading: leadsLoading, error: leadsError } = useListLeads(
     (sourceFilter !== "all" || statusFilter !== "all")
       ? {
@@ -110,6 +151,15 @@ export default function LeadsPage() {
   const maxConvos = Math.max(...heatmapData.map((r) => r.convos), 1);
   const maxCloses = Math.max(...heatmapData.map((r) => r.closes), 1);
   const maxRevenue = Math.max(...heatmapData.map((r) => r.revenue), 1);
+
+  // Apply local optimistic deletes and updates on top of server data
+  const visibleLeads = useMemo(
+    () =>
+      (leads ?? [])
+        .filter((l) => !localDeleted.has(l.id))
+        .map((l) => ({ ...l, ...(localUpdated.get(l.id) ?? {}) })),
+    [leads, localDeleted, localUpdated],
+  );
 
   if (leadsLoading && !leads) return <PageLoader />;
   if (leadsError) return <ErrorState error={leadsError} />;
@@ -253,8 +303,12 @@ export default function LeadsPage() {
         </div>
 
         <div className="space-y-3">
-          {leads?.map((lead) => (
-            <Card key={lead.id} className="!p-4 sm:!p-5">
+          {visibleLeads.map((lead) => (
+            <Card
+              key={lead.id}
+              className="!p-4 sm:!p-5 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => handleLeadClick(lead)}
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 text-xs font-bold">
@@ -321,7 +375,7 @@ export default function LeadsPage() {
             </Card>
           ))}
 
-          {leads?.length === 0 && (
+          {visibleLeads.length === 0 && (
             <div className="py-16 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
               <User className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="font-medium">No leads match these filters.</p>
@@ -332,6 +386,16 @@ export default function LeadsPage() {
       </div>
 
       <AddLeadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      <LeadDrawer
+        open={drawerOpen}
+        lead={selectedLead}
+        loading={drawerLoading}
+        error={drawerError}
+        onClose={() => setDrawerOpen(false)}
+        onLeadUpdated={handleLeadUpdated}
+        onLeadDeleted={handleLeadDeleted}
+      />
     </div>
   );
 }

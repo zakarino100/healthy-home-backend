@@ -73,6 +73,7 @@ Connection string stored in `SUPABASE_DATABASE_URL` env var; `lib/db/src/index.t
 | `users.ts` | `hh_users` | HH team members |
 | `routes.ts` → `canvassingRoutesTable` | `canvassing_routes` | Shared (no `hh_` prefix) — D2D app can also read/write this |
 | `tasks.ts` → `tasksTable` | `hh_tasks` | Follow-up tasks linked to jobs, leads, sessions, customers |
+| `lead-meta.ts` → `leadMetaTable` | `hh_lead_meta` | Soft-delete + change audit log for leads (one row per lead, created on first edit/delete) |
 
 All `hh_*` tables use **TEXT** fields for status/enum columns (no pgEnum) to avoid conflicts with the live DB's existing enum types.
 

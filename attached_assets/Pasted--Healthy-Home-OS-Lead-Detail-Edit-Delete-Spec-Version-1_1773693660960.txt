@@ -1,0 +1,531 @@
+# Healthy Home OS — Lead Detail, Edit & Delete Spec
+**Version:** 1.1 (patched per Robin review)
+**Target:** Replit Agent  
+**Depends on:** healthy-home-os-spec.md (base spec must be complete first)
+
+---
+
+## READ THIS FIRST — Instructions for Replit Agent
+
+This spec **extends** the existing Healthy Home OS. The `Lead` model, leads API routes, and Leads page already exist.
+
+Your job is to:
+1. Add soft delete fields to the Lead schema
+2. Update the leads API to support soft delete and audit tracking
+3. Make lead rows in the UI clickable (opens a right-side drawer)
+4. Add edit and delete flows inside the drawer with confirmation modals
+
+**Build in the order listed. Do not skip phases.**
+
+---
+
+## Safety / Data Protection Rules
+
+Read these before touching anything. These rules override any assumption you make about "cleaning up" existing code.
+
+- Do not delete, drop, recreate, or wipe existing lead data
+- Do not drop or recreate the Lead table under any circumstances
+- All schema changes must be additive — new fields only, no removals or renames
+- Do not remove, rename, or repurpose any existing Lead fields
+- Preserve all existing API behavior unless this spec explicitly changes it
+- All existing lead list behavior, filters, and working route logic must continue to function after these changes
+- Before applying the migration, inspect the current Lead schema and confirm the migration is additive only
+- Use an explicit server-side allowlist for editable fields — do not trust arbitrary request body keys
+- Only update fields explicitly present in the sanitized request body — never overwrite existing DB values with `undefined`
+- Do not append a changeLog entry if no actual field values changed
+- Use the same ID type as the existing `User` model for `deletedBy` and `updatedBy` — if user IDs are not plain strings in the current schema, match the existing type
+
+---
+
+## Build Phase 1 — Schema Changes
+
+**File:** `prisma/schema.prisma`
+
+Add these fields to the **existing** `Lead` model. Do not remove any existing fields.
+
+```prisma
+// Add to existing Lead model
+isDeleted     Boolean   @default(false)
+deletedAt     DateTime?
+deletedBy     String?   // userId of who deleted it — match type of User.id
+updatedBy     String?   // userId of who last updated it — match type of User.id
+changeLog     Json?     // array of change records — see format below
+```
+
+**`changeLog` field format** — store as a JSON array, append on every edit:
+
+```json
+[
+  {
+    "changedAt": "2026-01-15T20:00:00Z",
+    "changedBy": "user-uuid",
+    "changedByName": "Admin",
+    "fields": {
+      "status": { "from": "new", "to": "quoted" },
+      "quoteAmount": { "from": null, "to": 350 }
+    }
+  }
+]
+```
+
+After schema changes:
+1. Run `npx prisma migrate dev --name lead_soft_delete_and_audit`
+2. Run `npx prisma generate`
+3. Confirm no errors before continuing.
+
+---
+
+## Build Phase 2 — Backend Route Changes
+
+**File:** `src/routes/leads.js`
+
+Make the following changes to existing routes. Do not rebuild routes that work correctly.
+
+---
+
+### 2A. Update `GET /api/leads`
+
+Add this filter: **by default, exclude soft-deleted leads.**
+
+```js
+// Default behavior — never return deleted leads
+where: { isDeleted: false }
+
+// Support optional query param to include deleted (admin only):
+// ?includeDeleted=true → remove the isDeleted filter
+```
+
+All existing query filters (?status=, ?canvasserId=, ?date=) must continue to work unchanged.
+
+---
+
+### 2B. Update `PUT /api/leads/:id`
+
+**Step 1 — Soft delete gate.** If the lead has `isDeleted = true`, return 404. Do not update a deleted lead.
+
+**Step 2 — Use an explicit allowlist.** Extract only these fields from the request body — ignore everything else silently:
+
+```js
+const EDITABLE_FIELDS = [
+  'firstName', 'lastName', 'phone', 'email',
+  'address', 'city', 'state', 'zip',
+  'serviceInterest', 'quoteAmount', 'status',
+  'followUpDate', 'notes'
+]
+
+const updateData = {}
+for (const field of EDITABLE_FIELDS) {
+  if (req.body[field] !== undefined) {
+    updateData[field] = req.body[field]
+  }
+}
+// updateData now contains only fields explicitly sent — no undefined overwrites
+```
+
+**Step 3 — Compute the changeset.** Fetch the current DB record, then compare:
+
+```js
+const current = await prisma.lead.findUnique({ where: { id: req.params.id } })
+const changedFields = {}
+for (const field of Object.keys(updateData)) {
+  if (String(updateData[field]) !== String(current[field])) {
+    changedFields[field] = { from: current[field] ?? null, to: updateData[field] }
+  }
+}
+```
+
+**Step 4 — If no fields actually changed:** do not write to DB, do not append to changeLog. Return the existing lead as-is with status 200.
+
+**Step 5 — If fields changed:**
+1. Build a change entry using `changedFields` in the format shown in Phase 1
+2. Append to existing changeLog: `[...(current.changeLog ?? []), newEntry]` — do not overwrite
+3. Set `updatedBy = req.user?.id ?? 'system'`
+4. Save `updateData` + `updatedBy` + updated `changeLog` in a single Prisma update call
+5. Return the full updated lead
+
+---
+
+### 2C. Update `DELETE /api/leads/:id`
+
+**Soft delete gate.** If the lead already has `isDeleted = true`, return success (idempotent — do not return 404, do not hard delete).
+
+**Replace hard delete with soft delete.** Do not use `prisma.lead.delete()`.
+
+```js
+await prisma.lead.update({
+  where: { id: req.params.id },
+  data: {
+    isDeleted: true,
+    deletedAt: new Date(),
+    deletedBy: req.user?.id ?? 'system'
+  }
+})
+```
+
+Return: `{ success: true, message: "Lead deleted." }`
+
+This lead will no longer appear in `GET /api/leads` (filtered by `isDeleted: false`).
+
+---
+
+### 2D. Add `GET /api/leads/:id`
+
+If this route doesn't exist, create it now.
+
+```js
+// Return single lead by id
+// If isDeleted = true, return 404
+// Include: all lead fields
+// Include: linked customer record if exists (via leadId on Customer)
+// Include: related jobs if customer exists
+```
+
+Response shape:
+```json
+{
+  "id": "string",
+  "firstName": "string",
+  "lastName": "string",
+  "phone": "string",
+  "email": "string",
+  "address": "string",
+  "city": "string",
+  "state": "string",
+  "zip": "string",
+  "serviceInterest": "string",
+  "quoteAmount": 0,
+  "status": "string",
+  "source": "string",
+  "followUpDate": "ISO string or null",
+  "notes": "string or null",
+  "canvasserId": "string or null",
+  "canvasserName": "string or null",
+  "createdAt": "ISO string",
+  "updatedAt": "ISO string",
+  "updatedBy": "string or null",
+  "changeLog": [],
+  "linkedCustomer": null,
+  "linkedJobs": []
+}
+```
+
+---
+
+## Build Phase 3 — Frontend: Clickable Lead Rows
+
+**File:** `client/src/pages/Leads.jsx`
+
+Make the following changes to the existing Leads page. Do not rebuild the whole page. Do not remove existing filters, sort behavior, or list rendering logic.
+
+---
+
+### 3A. Make each lead row clickable
+
+Add an `onClick` handler to each lead row:
+
+```jsx
+<tr onClick={() => handleLeadClick(lead)} style={{ cursor: 'pointer' }}>
+```
+
+Add state to the Leads page:
+```js
+const [selectedLead, setSelectedLead] = useState(null)
+const [drawerOpen, setDrawerOpen] = useState(false)
+const [drawerLoading, setDrawerLoading] = useState(false)
+const [drawerError, setDrawerError] = useState(null)
+```
+
+**`handleLeadClick` function:**
+```js
+async function handleLeadClick(lead) {
+  setSelectedLead(lead)   // show drawer immediately with data we already have
+  setDrawerOpen(true)
+  setDrawerLoading(true)
+  setDrawerError(null)
+  try {
+    const res = await fetch(`/api/leads/${lead.id}`)
+    if (!res.ok) throw new Error('Failed to load lead')
+    const full = await res.json()
+    setSelectedLead(full)  // replace with full detail once loaded
+  } catch (err) {
+    setDrawerError('Could not load lead detail. Please try again.')
+  } finally {
+    setDrawerLoading(false)
+  }
+}
+```
+
+**After a successful edit, update both the drawer and the list:**
+```js
+function handleLeadUpdated(updatedLead) {
+  setSelectedLead(updatedLead)                                // update drawer
+  setLeads(prev => prev.map(l =>                             // update list row
+    l.id === updatedLead.id ? { ...l, ...updatedLead } : l
+  ))
+}
+```
+
+**After a successful delete, update the list and close drawer:**
+```js
+function handleLeadDeleted(deletedId) {
+  setLeads(prev => prev.filter(l => l.id !== deletedId))    // remove from list
+  setDrawerOpen(false)
+  setSelectedLead(null)
+}
+```
+
+Pass `handleLeadUpdated` and `handleLeadDeleted` as props into `LeadDrawer`.
+
+---
+
+### 3B. Build the Lead Drawer component
+
+**File:** `client/src/components/LeadDrawer.jsx`
+
+This is a right-side slide-over panel. Build it from scratch using plain CSS.
+
+**Props:**
+```js
+// open: boolean
+// lead: object or null
+// loading: boolean
+// error: string or null
+// onClose: function
+// onLeadUpdated: function(updatedLead)
+// onLeadDeleted: function(deletedId)
+```
+
+**Drawer behavior:**
+- Fixed position, right side of screen
+- Width: 420px on desktop, 100% width on mobile (use media query)
+- Slides in from the right when `open = true`
+- Clicking the backdrop (left of drawer) closes it
+- X button in top-right corner closes it
+- Closing calls `onClose()`
+
+**CSS for drawer:**
+```css
+.lead-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 420px;
+  background: #fff;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  z-index: 1000;
+  overflow-y: auto;
+  padding-bottom: 80px;  /* space for fixed action bar */
+}
+.lead-drawer.open {
+  transform: translateX(0);
+}
+.lead-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 999;
+}
+.lead-drawer-actions {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 420px;
+  background: #fff;
+  border-top: 1px solid #eee;
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 1001;
+}
+@media (max-width: 480px) {
+  .lead-drawer,
+  .lead-drawer-actions {
+    width: 100%;
+  }
+}
+```
+
+**Drawer sections (in order, top to bottom):**
+
+1. **Header bar** — lead full name + status badge + close (X) button
+2. **Loading state** — if `loading = true`, show a centered spinner or "Loading..." text
+3. **Error state** — if `error` is set, show the error message with a retry or close option
+4. **Contact info** — phone (tap-to-call `<a href="tel:...">` link), email, full address
+5. **Lead info** — service interest, quote amount, source, assigned canvasser, follow-up date
+6. **Notes** — display current notes text
+7. **Change history** — if `changeLog` has entries, show a timeline list (most recent first):
+   - `"Jan 15 at 8:00 PM — Admin changed status: new → quoted"`
+8. **Action bar** (fixed at bottom of drawer, uses `.lead-drawer-actions`) — two buttons: **Edit** and **Delete**
+
+---
+
+## Build Phase 4 — Edit Flow
+
+**File:** `client/src/components/LeadDrawer.jsx`
+
+---
+
+### 4A. Edit mode
+
+Add state:
+```js
+const [editMode, setEditMode] = useState(false)
+const [formData, setFormData] = useState({})
+```
+
+When **Edit** button is clicked:
+- Set `editMode = true`
+- Initialize `formData` with a copy of current lead values for editable fields only
+- All editable fields switch from display text to input fields (in-place)
+- Action bar changes to show **Save** and **Cancel** buttons
+
+**Editable fields:**
+- firstName, lastName
+- phone, email
+- address, city, state, zip
+- serviceInterest (dropdown: house_wash / driveway / bundle)
+- quoteAmount (number input)
+- status (dropdown: new / quoted / follow_up / sold / lost)
+- followUpDate (date input)
+- notes (textarea)
+
+**Non-editable fields (display only, never become inputs):**
+- id, createdAt, source, canvasserId, changeLog, updatedBy
+
+**Cancel button:** resets `formData`, sets `editMode = false`. No modal needed.
+
+---
+
+### 4B. Save confirmation modal
+
+When **Save** is clicked in edit mode:
+
+1. Compute changed fields by comparing `formData` to original `lead` prop values
+2. If nothing changed, show toast: `"No changes to save."` — do not open modal
+3. If changes exist, open the **Edit Confirmation Modal**
+
+**Edit Confirmation Modal content:**
+```
+Title: "Save Changes?"
+
+Body: Show a table of changed fields only:
+  Field        | Before      | After
+  -------------|-------------|-------
+  Status       | new         | quoted
+  Quote Amount | —           | $350
+
+Buttons:
+  [Cancel]   [Save Changes]
+```
+
+When **Save Changes** is confirmed:
+- PUT to `/api/leads/:id` with only the changed fields in the body (not the full form)
+- On success: call `onLeadUpdated(responseData)`, exit edit mode, show toast: `"Lead updated."`
+- On error: show toast: `"Update failed. Please try again."` — stay in edit mode
+
+---
+
+## Build Phase 5 — Delete Flow
+
+**File:** `client/src/components/LeadDrawer.jsx`
+
+---
+
+### 5A. Delete confirmation modal
+
+When **Delete** button is clicked, open the **Delete Confirmation Modal**.
+
+**Delete Confirmation Modal content:**
+```
+Title: "Delete This Lead?"
+
+Body:
+  "You are about to delete [First Name Last Name].
+   This cannot be easily undone."
+
+Buttons:
+  [Cancel]   [Delete Lead]
+
+  "Delete Lead" button must be styled red/destructive.
+  Button label must say "Delete Lead" — not "OK", "Yes", or "Confirm".
+```
+
+When **Delete Lead** is confirmed:
+- DELETE to `/api/leads/:id`
+- On success: call `onLeadDeleted(lead.id)`, show toast: `"Lead deleted."`
+- On error: show toast: `"Delete failed. Please try again."`
+
+---
+
+## Build Phase 6 — Toast Notifications
+
+**File:** `client/src/components/Toast.jsx`
+
+If a toast component doesn't exist, create a minimal one.
+
+```jsx
+// Appears at bottom-right of screen
+// Props: message (string), type ("success" | "error")
+// Auto-dismisses after 3 seconds
+// Stacks if multiple toasts fire (each gets its own timer)
+// Does not block drawer interaction
+```
+
+Use this toast for all success/error feedback in the lead drawer.
+
+---
+
+## Summary of All File Changes
+
+| File | Change |
+|---|---|
+| `prisma/schema.prisma` | Add 5 fields to Lead model (additive only) |
+| `src/routes/leads.js` | Update GET (filter deleted), PUT (allowlist + audit), DELETE (soft delete), GET /:id (full detail) |
+| `client/src/pages/Leads.jsx` | Add onClick handler, drawer state, handleLeadUpdated, handleLeadDeleted |
+| `client/src/components/LeadDrawer.jsx` | New component — drawer, loading/error states, edit mode, save modal, delete modal |
+| `client/src/components/Toast.jsx` | New component — toast notifications |
+
+---
+
+## Definition of Done
+
+- [ ] Migration runs cleanly and is additive — 5 new fields added, nothing removed
+- [ ] `GET /api/leads` never returns leads where `isDeleted = true`
+- [ ] All existing GET /api/leads filters still work after change
+- [ ] `GET /api/leads/:id` returns 404 for soft-deleted leads
+- [ ] `DELETE /api/leads/:id` does not remove the DB record — sets `isDeleted = true`
+- [ ] Repeated DELETE on already-deleted lead returns success (idempotent)
+- [ ] `PUT /api/leads/:id` returns 404 if lead is soft deleted
+- [ ] `PUT /api/leads/:id` only updates fields in the explicit allowlist
+- [ ] `PUT /api/leads/:id` does not overwrite omitted fields with undefined
+- [ ] `PUT /api/leads/:id` appends to changeLog only when real fields changed
+- [ ] `PUT /api/leads/:id` returns existing lead unchanged when nothing changed
+- [ ] Clicking any lead row opens the drawer immediately, then fetches full detail
+- [ ] Drawer shows loading state while fetching, error state if fetch fails
+- [ ] Drawer slides in from right, closes on backdrop click or X button
+- [ ] Edit button makes editable fields into inputs; Cancel restores display mode
+- [ ] Clicking Save with no changes shows "No changes to save" — no modal
+- [ ] Clicking Save with changes shows before/after confirmation modal
+- [ ] Confirming edit sends only changed fields to PUT, updates drawer AND list row — no page reload
+- [ ] Clicking Delete shows destructive modal with red "Delete Lead" button
+- [ ] Confirming delete soft-deletes, removes lead from visible list, closes drawer
+- [ ] Drawer action bar does not cover form content on mobile
+- [ ] Toast notifications appear for all success/error events
+
+---
+
+## Things Replit Agent Must NOT Do
+
+- Do not use hard delete (`prisma.lead.delete()`) anywhere
+- Do not drop or recreate the Lead table
+- Do not remove or rename any existing Lead model fields
+- Do not overwrite the entire `changeLog` field on update — always append
+- Do not append a changeLog entry when nothing actually changed
+- Do not rebuild the entire Leads page — only add onClick handler and drawer state
+- Do not use any UI component library — plain CSS and React only
+- Do not add a separate route or page for lead detail — use the drawer only
+- Do not auto-save on field change — save only happens when user clicks Save and confirms
+- Do not send the full form object on save — send only the changed fields
