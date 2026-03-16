@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListJobs, useCreateJob, useCompleteJob, useListCustomers } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PageLoader, ErrorState, Card, Button, Badge, Modal, Input, Select, Label } from "@/components/ui-components";
-import { Plus, Check, Calendar, DollarSign, Clock } from "lucide-react";
+import { Plus, Check, Calendar, DollarSign, Clock, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export const TECHNICIANS = ["Naseem", "Zak"];
@@ -22,6 +22,7 @@ type PendingSale = {
   soldPrice: string | null;
   servicePackage: string | null;
   isBundle: boolean;
+  repNotes: string | null;
   createdAt: string;
 };
 
@@ -138,6 +139,12 @@ export default function JobsPage() {
                   Sold {formatDate(sale.createdAt)}
                   {sale.canvasser && <> · {sale.canvasser}</>}
                 </div>
+                {sale.repNotes && (
+                  <div className="flex gap-1.5 bg-amber-100/60 rounded-lg px-2.5 py-2 mb-3">
+                    <MessageSquare className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-800 leading-relaxed">{sale.repNotes}</p>
+                  </div>
+                )}
                 <Button
                   className="w-full"
                   onClick={() => setSchedulingLead(sale)}

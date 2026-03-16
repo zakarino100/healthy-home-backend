@@ -219,9 +219,11 @@ export interface Job {
   paymentStatus: JobPaymentStatus;
   paymentAmountCollected?: string | null;
   notes?: string | null;
-  satisfactionWorkflowTriggered: boolean;
+  repNotes?: string | null;
+  leadId?: string | null;
+  satisfactionWorkflowTriggered?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export type CreateJobServiceType =

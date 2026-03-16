@@ -32,9 +32,30 @@ router.get("/", async (req, res) => {
     if (startDate) conditions.push(gte(jobsTable.scheduledAt, new Date(startDate)));
     if (endDate) conditions.push(lte(jobsTable.scheduledAt, new Date(endDate)));
 
+    const baseQuery = db
+      .select({
+        id: jobsTable.id,
+        customerId: jobsTable.customerId,
+        serviceType: jobsTable.serviceType,
+        status: jobsTable.status,
+        scheduledAt: jobsTable.scheduledAt,
+        completedAt: jobsTable.completedAt,
+        technicianAssigned: jobsTable.technicianAssigned,
+        soldPrice: jobsTable.soldPrice,
+        quotedPrice: jobsTable.quotedPrice,
+        paymentStatus: jobsTable.paymentStatus,
+        paymentAmountCollected: jobsTable.paymentAmountCollected,
+        notes: jobsTable.notes,
+        leadId: jobsTable.leadId,
+        repNotes: leadDetailsTable.notes,
+        createdAt: jobsTable.createdAt,
+      })
+      .from(jobsTable)
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, jobsTable.leadId));
+
     const jobs = conditions.length > 0
-      ? await db.select().from(jobsTable).where(and(...conditions)).orderBy(jobsTable.scheduledAt)
-      : await db.select().from(jobsTable).orderBy(jobsTable.scheduledAt);
+      ? await baseQuery.where(and(...conditions)).orderBy(jobsTable.scheduledAt)
+      : await baseQuery.orderBy(jobsTable.scheduledAt);
 
     res.json(jobs);
   } catch (err) {
@@ -92,6 +113,7 @@ router.get("/pending-sales", async (req, res) => {
         servicePackage: leadDetailsTable.servicePackage,
         isBundle: leadDetailsTable.isBundle,
         detailsJobId: leadDetailsTable.jobId,
+        repNotes: leadDetailsTable.notes,
       })
       .from(leadsTable)
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
@@ -122,6 +144,7 @@ router.get("/pending-sales", async (req, res) => {
         quotePrice: r.quotePrice,
         servicePackage,
         isBundle: r.isBundle ?? false,
+        repNotes: r.repNotes ?? null,
         createdAt: r.createdAt,
       };
     });
