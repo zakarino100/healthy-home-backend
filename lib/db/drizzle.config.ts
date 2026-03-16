@@ -10,6 +10,7 @@ if (!url) {
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),
   dialect: "postgresql",
+  tablesFilter: ["hh_*"],
   dbCredentials: {
     url,
     ssl: process.env.SUPABASE_DATABASE_URL ? { rejectUnauthorized: false } : undefined,

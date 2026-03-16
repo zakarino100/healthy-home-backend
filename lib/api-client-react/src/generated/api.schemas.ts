@@ -17,6 +17,7 @@ export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const UserRole = {
   admin: "admin",
+  management: "management",
   canvasser: "canvasser",
   technician: "technician",
 } as const;
@@ -25,7 +26,10 @@ export interface User {
   id: number;
   name: string;
   email?: string | null;
+  phone?: string | null;
   role: UserRole;
+  position?: string | null;
+  notes?: string | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +40,7 @@ export type CreateUserRole =
 
 export const CreateUserRole = {
   admin: "admin",
+  management: "management",
   canvasser: "canvasser",
   technician: "technician",
 } as const;
@@ -43,7 +48,10 @@ export const CreateUserRole = {
 export interface CreateUser {
   name: string;
   email?: string | null;
+  phone?: string | null;
   role: CreateUserRole;
+  position?: string | null;
+  notes?: string | null;
   active?: boolean;
 }
 

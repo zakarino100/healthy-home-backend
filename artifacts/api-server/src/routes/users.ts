@@ -32,7 +32,10 @@ router.post("/", async (req, res) => {
     const [user] = await db.insert(usersTable).values({
       name: body.name,
       email: body.email ?? null,
+      phone: body.phone ?? null,
       role: body.role ?? "canvasser",
+      position: body.position ?? null,
+      notes: body.notes ?? null,
       active: body.active ?? true,
     }).returning();
     res.status(201).json(user);
@@ -64,7 +67,10 @@ router.put("/:id", async (req, res) => {
       .set({
         name: body.name,
         email: body.email ?? null,
+        phone: body.phone ?? null,
         role: body.role ?? "canvasser",
+        position: body.position ?? null,
+        notes: body.notes ?? null,
         active: body.active ?? true,
         updatedAt: new Date(),
       })
