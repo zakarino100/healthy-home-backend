@@ -178,21 +178,28 @@ router.post("/from-lead/:leadId", async (req, res) => {
     const leadId = req.params.leadId;
     const body = req.body;
 
+    // leftJoin so leads without an hh_lead_details row are still schedulable
     const [row] = await db
       .select({ lead: leadsTable, details: leadDetailsTable })
       .from(leadsTable)
-      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.id, leadId),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       ));
 
-    if (!row) return res.status(404).json({ error: "Lead not found or not yet sold" });
+    if (!row) return res.status(404).json({ error: "Lead not found" });
 
     const name = row.lead.homeownerName ?? "";
     const spaceIdx = name.indexOf(" ");
     const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name;
     const lastName = spaceIdx >= 0 ? name.slice(spaceIdx + 1) : "";
+
+    // Derive service type: details row > services_interested array > fallback
+    const serviceType = row.details?.servicePackage
+      ?? (Array.isArray(row.lead.servicesInterested) ? row.lead.servicesInterested[0] : null)
+      ?? body.serviceType
+      ?? "SERVICE TBD";
 
     const [customer] = await db.insert(customersTable).values({
       firstName: firstName || "Unknown",
@@ -210,9 +217,9 @@ router.post("/from-lead/:leadId", async (req, res) => {
 
     const [job] = await db.insert(jobsTable).values({
       customerId: customer.id,
-      serviceType: row.details.servicePackage ?? "house_wash",
-      soldPrice: row.details.soldPrice ?? null,
-      quotedPrice: row.details.quotePrice ?? null,
+      serviceType,
+      soldPrice: row.details?.soldPrice ?? null,
+      quotedPrice: row.details?.quotePrice ?? null,
       status: "scheduled",
       scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
       technicianAssigned: body.technicianAssigned ?? null,
@@ -223,9 +230,21 @@ router.post("/from-lead/:leadId", async (req, res) => {
 
     await db.insert(jobContentTable).values({ jobId: job.id }).onConflictDoNothing();
 
-    await db.update(leadDetailsTable)
-      .set({ jobId: job.id, updatedAt: new Date() })
-      .where(eq(leadDetailsTable.leadId, leadId));
+    // If a details row exists, link it — otherwise create one now
+    if (row.details) {
+      await db.update(leadDetailsTable)
+        .set({ jobId: job.id, updatedAt: new Date() })
+        .where(eq(leadDetailsTable.leadId, leadId));
+    } else {
+      await db.insert(leadDetailsTable).values({
+        leadId,
+        jobId: job.id,
+        soldPrice: null,
+        quotePrice: null,
+        servicePackage: serviceType,
+        isBundle: false,
+      }).onConflictDoNothing();
+    }
 
     res.status(201).json({ customer, job });
   } catch (err) {
