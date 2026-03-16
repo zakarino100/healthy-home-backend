@@ -85,9 +85,15 @@ All `hh_*` tables use **TEXT** fields for status/enum columns (no pgEnum) to avo
 | `followUpDate` | `next_followup_at` |
 | `id` | `id` (UUID, not integer) |
 
+| `routes.ts` → `canvassingRoutesTable` | `canvassing_routes` | Shared route planning table — no `hh_` prefix so the D2D app can also read/write it |
+
 ### Schema changes
 
-For any new `hh_*` table: create via direct SQL (executeSql tool), then add Drizzle schema to match. Do NOT use `drizzle-kit push` — it may attempt to alter existing Wolfpack tables.
+**drizzle.config.ts** now has `tablesFilter: ["hh_*"]` — drizzle-kit only manages tables with the `hh_` prefix and will never attempt to drop/alter Wolfpack or shared tables.
+
+For any new `hh_*` table: create via direct SQL, add Drizzle schema to match. Do NOT use `drizzle-kit push` — even with tablesFilter it can try to CREATE non-hh tables that are in the schema.
+
+For shared tables (no `hh_` prefix, accessible to both apps): create via SQL migration script, add Drizzle schema for type-safe queries only — drizzle-kit will not manage them due to the filter.
 
 ## API Routes (artifacts/api-server/src/routes/)
 
@@ -97,11 +103,14 @@ For any new `hh_*` table: create via direct SQL (executeSql tool), then add Driz
 | Users | GET/POST /api/users, GET/PUT/DELETE /api/users/:id |
 | Canvassing | GET/POST /api/canvassing/sessions, GET/PUT/DELETE /api/canvassing/sessions/:id |
 | Leads | GET/POST /api/canvassing/leads, GET/PUT/DELETE /api/canvassing/leads/:id, POST /api/canvassing/leads/:id/convert |
+| **Routes** | **GET/POST /api/canvassing/routes, PUT/DELETE /api/canvassing/routes/:id** — shared `canvassing_routes` table |
 | Customers | GET/POST /api/customers, GET/PUT /api/customers/:id |
 | Jobs | GET/POST /api/jobs, GET/PUT /api/jobs/:id, POST /api/jobs/:id/complete |
+| Jobs (pending) | GET /api/jobs/pending-sales — includes `latestTouchNote` + `latestTouchDate` from `d2d_touches` |
 | Reviews | GET /api/reviews, POST /api/reviews/:id/satisfaction, POST /api/reviews/:id/resolve-issue, POST /api/reviews/campaign/batch |
 | Content | GET/PUT /api/content/:jobId |
 | Dashboard | GET /api/dashboard/today, GET /api/dashboard/weekly |
+| Calendar | GET /api/calendar — returns `jobs` + `routes` (from `canvassing_routes`) |
 | Reports | GET /api/reports/daily, POST /api/reports/daily/generate, GET /api/reports/daily/:date/export?format=json|csv |
 
 ## Key Business Logic

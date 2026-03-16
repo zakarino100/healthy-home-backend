@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListJobs, useCreateJob, useCompleteJob, useListCustomers } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PageLoader, ErrorState, Card, Button, Badge, Modal, Input, Select, Label } from "@/components/ui-components";
-import { Plus, Check, Calendar, DollarSign, Clock, MessageSquare } from "lucide-react";
+import { Plus, Check, Calendar, DollarSign, Clock, MessageSquare, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { TECHNICIANS } from "@/lib/constants";
@@ -23,6 +23,8 @@ type PendingSale = {
   servicePackage: string | null;
   isBundle: boolean;
   repNotes: string | null;
+  latestTouchNote: string | null;
+  latestTouchDate: string | null;
   createdAt: string;
 };
 
@@ -140,9 +142,21 @@ export default function JobsPage() {
                   {sale.canvasser && <> · {sale.canvasser}</>}
                 </div>
                 {sale.repNotes && (
-                  <div className="flex gap-1.5 bg-amber-100/60 rounded-lg px-2.5 py-2 mb-3">
+                  <div className="flex gap-1.5 bg-amber-100/60 rounded-lg px-2.5 py-2 mb-2">
                     <MessageSquare className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-amber-800 leading-relaxed">{sale.repNotes}</p>
+                    <div>
+                      <span className="text-xs font-bold text-amber-700 uppercase tracking-wider block mb-0.5">Rep Note</span>
+                      <p className="text-xs text-amber-800 leading-relaxed">{sale.repNotes}</p>
+                    </div>
+                  </div>
+                )}
+                {sale.latestTouchNote && (
+                  <div className="flex gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2 mb-3">
+                    <MapPin className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-0.5">Canvassing Note</span>
+                      <p className="text-xs text-blue-900 leading-relaxed">{sale.latestTouchNote}</p>
+                    </div>
                   </div>
                 )}
                 <Button
@@ -293,12 +307,14 @@ function ScheduleModal({ sale, onClose }: { sale: PendingSale; onClose: () => vo
     scheduleMutation.mutate({
       scheduledAt: fd.get("scheduledAt") as string,
       technicianAssigned: (fd.get("technicianAssigned") as string) || "",
+      notes: (fd.get("notes") as string) || undefined,
     });
   };
 
   return (
     <Modal isOpen onClose={onClose} title="Schedule Job">
-      <div className="mb-4 p-4 bg-slate-50 rounded-xl space-y-1">
+      {/* Customer summary */}
+      <div className="mb-3 p-4 bg-slate-50 rounded-xl space-y-1">
         <p className="font-bold text-slate-900">{sale.firstName} {sale.lastName}</p>
         {sale.address && <p className="text-sm text-slate-600">{sale.address}{sale.city ? `, ${sale.city}` : ""}</p>}
         <div className="flex items-center gap-3 pt-1">
@@ -317,17 +333,45 @@ function ScheduleModal({ sale, onClose }: { sale: PendingSale; onClose: () => vo
         </div>
       </div>
 
+      {/* Canvassing note from the D2D app (most recent touch) */}
+      {sale.latestTouchNote && (
+        <div className="flex gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-3 mb-3">
+          <MapPin className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+          <div>
+            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider block mb-1">Canvassing Note</span>
+            <p className="text-sm text-blue-900 leading-relaxed font-medium">{sale.latestTouchNote}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Rep close note from hh_lead_details */}
+      {sale.repNotes && (
+        <div className="flex gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-3 mb-3">
+          <MessageSquare className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider block mb-1">Rep Note</span>
+            <p className="text-sm text-amber-900 leading-relaxed">{sale.repNotes}</p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label>Scheduled Date *</Label>
-          <Input type="date" name="scheduledAt" required />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Scheduled Date *</Label>
+            <Input type="date" name="scheduledAt" required />
+          </div>
+          <div>
+            <Label>Assign Technician</Label>
+            <Select name="technicianAssigned">
+              <option value="">Unassigned</option>
+              {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
+          </div>
         </div>
         <div>
-          <Label>Assign Technician</Label>
-          <Select name="technicianAssigned">
-            <option value="">Unassigned</option>
-            {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
-          </Select>
+          <Label>Scheduler Notes</Label>
+          <Input name="notes" placeholder="e.g. morning only, side gate, prefers call ahead..." />
         </div>
         <div className="pt-2 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

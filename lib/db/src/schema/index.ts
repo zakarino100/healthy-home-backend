@@ -6,3 +6,4 @@ export * from "./jobs";
 export * from "./reviews";
 export * from "./content";
 export * from "./reports";
+export * from "./routes";

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
   canvassingSessionsTable,
+  canvassingRoutesTable,
   leadsTable,
   leadDetailsTable,
   customersTable,
@@ -385,6 +386,95 @@ router.post("/leads/:id/convert", async (req, res) => {
       .where(eq(leadsTable.id, req.params.id));
 
     res.status(201).json({ customer, job });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Routes endpoints — canvassing_routes table (shared with D2D app)
+// ---------------------------------------------------------------------------
+
+// GET /canvassing/routes?startDate=&endDate=&date=
+router.get("/routes", async (req, res) => {
+  try {
+    const { startDate, endDate, date } = req.query as Record<string, string | undefined>;
+    let rows;
+    if (date) {
+      rows = await db.select().from(canvassingRoutesTable)
+        .where(eq(canvassingRoutesTable.date, date))
+        .orderBy(canvassingRoutesTable.date, canvassingRoutesTable.repName);
+    } else if (startDate && endDate) {
+      rows = await db.select().from(canvassingRoutesTable)
+        .where(and(
+          gte(canvassingRoutesTable.date, startDate),
+          lte(canvassingRoutesTable.date, endDate),
+        ))
+        .orderBy(canvassingRoutesTable.date, canvassingRoutesTable.repName);
+    } else {
+      rows = await db.select().from(canvassingRoutesTable)
+        .orderBy(canvassingRoutesTable.date, canvassingRoutesTable.repName);
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /canvassing/routes
+router.post("/routes", async (req, res) => {
+  try {
+    const body = req.body;
+    const [route] = await db.insert(canvassingRoutesTable).values({
+      date: body.date,
+      repEmail: body.repEmail,
+      repName: body.repName ?? null,
+      neighborhood: body.neighborhood ?? null,
+      routeName: body.routeName ?? null,
+      status: body.status ?? "planned",
+      notes: body.notes ?? null,
+    }).returning();
+    res.status(201).json(route);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PUT /canvassing/routes/:id
+router.put("/routes/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const body = req.body;
+    const [route] = await db.update(canvassingRoutesTable)
+      .set({
+        date: body.date,
+        repEmail: body.repEmail,
+        repName: body.repName ?? null,
+        neighborhood: body.neighborhood ?? null,
+        routeName: body.routeName ?? null,
+        status: body.status ?? "planned",
+        notes: body.notes ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(canvassingRoutesTable.id, id))
+      .returning();
+    if (!route) return res.status(404).json({ error: "Route not found" });
+    res.json(route);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /canvassing/routes/:id
+router.delete("/routes/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(canvassingRoutesTable).where(eq(canvassingRoutesTable.id, id));
+    res.status(204).send();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

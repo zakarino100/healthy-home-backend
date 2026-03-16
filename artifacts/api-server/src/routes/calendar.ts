@@ -1,12 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { canvassingSessionsTable, jobsTable, customersTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { jobsTable, customersTable, canvassingRoutesTable } from "@workspace/db/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 // GET /calendar?startDate=2026-03-10&endDate=2026-03-16
-// Returns jobs + canvassing sessions for the given date range
 router.get("/", async (req, res) => {
   try {
     const { startDate, endDate } = req.query as Record<string, string>;
@@ -17,7 +16,7 @@ router.get("/", async (req, res) => {
 
     const rangeStart = new Date(startDate);
     const rangeEnd = new Date(endDate);
-    rangeEnd.setDate(rangeEnd.getDate() + 1); // inclusive end
+    rangeEnd.setDate(rangeEnd.getDate() + 1);
 
     // Jobs in range — join with customers for display name
     const jobs = await db
@@ -44,17 +43,16 @@ router.get("/", async (req, res) => {
       ))
       .orderBy(jobsTable.scheduledAt);
 
-    // Canvassing sessions in range
-    const sessions = await db
+    // Routes from shared canvassing_routes table
+    const routes = await db
       .select()
-      .from(canvassingSessionsTable)
+      .from(canvassingRoutesTable)
       .where(and(
-        gte(canvassingSessionsTable.sessionDate, startDate),
-        lte(canvassingSessionsTable.sessionDate, endDate),
+        gte(canvassingRoutesTable.date, startDate),
+        lte(canvassingRoutesTable.date, endDate),
       ))
-      .orderBy(canvassingSessionsTable.sessionDate, canvassingSessionsTable.canvasser);
+      .orderBy(canvassingRoutesTable.date, canvassingRoutesTable.repName);
 
-    // Shape jobs with a plain date string key
     const jobsWithDate = jobs.map(j => ({
       ...j,
       dateKey: j.scheduledAt
@@ -66,7 +64,7 @@ router.get("/", async (req, res) => {
       startDate,
       endDate,
       jobs: jobsWithDate,
-      sessions,
+      routes,
     });
   } catch (err) {
     console.error(err);

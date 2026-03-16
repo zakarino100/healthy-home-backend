@@ -114,6 +114,20 @@ router.get("/pending-sales", async (req, res) => {
         isBundle: leadDetailsTable.isBundle,
         detailsJobId: leadDetailsTable.jobId,
         repNotes: leadDetailsTable.notes,
+        latestTouchNote: sql<string | null>`(
+          SELECT notes FROM d2d_touches
+          WHERE lead_id = ${leadsTable.id}
+            AND notes IS NOT NULL AND notes <> ''
+          ORDER BY created_at DESC
+          LIMIT 1
+        )`,
+        latestTouchDate: sql<string | null>`(
+          SELECT created_at::text FROM d2d_touches
+          WHERE lead_id = ${leadsTable.id}
+            AND notes IS NOT NULL AND notes <> ''
+          ORDER BY created_at DESC
+          LIMIT 1
+        )`,
       })
       .from(leadsTable)
       .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
@@ -145,6 +159,8 @@ router.get("/pending-sales", async (req, res) => {
         servicePackage,
         isBundle: r.isBundle ?? false,
         repNotes: r.repNotes ?? null,
+        latestTouchNote: r.latestTouchNote ?? null,
+        latestTouchDate: r.latestTouchDate ?? null,
         createdAt: r.createdAt,
       };
     });

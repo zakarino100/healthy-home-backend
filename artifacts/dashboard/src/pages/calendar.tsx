@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-components";
-import { ChevronLeft, ChevronRight, Plus, Briefcase, Map, DollarSign } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Briefcase, Map, DollarSign, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { TECHNICIANS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
@@ -67,15 +67,16 @@ type CalJob = {
   soldPrice: string | null;
   dateKey: string | null;
 };
-type CalSession = {
+type CalRoute = {
   id: number;
-  canvasser: string;
-  sessionDate: string;
+  date: string;
+  repEmail: string;
+  repName: string | null;
   neighborhood: string | null;
-  route: string | null;
-  doorsKnocked: number;
-  goodConversations: number;
-  closes: number;
+  routeName: string | null;
+  status: string;
+  notes: string | null;
+  createdAt: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -85,19 +86,33 @@ export default function CalendarPage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));
   const [selectedDate, setSelectedDate] = useState<string>(toDateStr(new Date()));
   const [isAddRouteOpen, setIsAddRouteOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const weekEnd = addDays(weekStart, 6);
   const startStr = toDateStr(weekStart);
   const endStr = toDateStr(weekEnd);
 
-  const { data, isLoading } = useQuery<{ jobs: CalJob[]; sessions: CalSession[] }>({
+  const { data, isLoading } = useQuery<{ jobs: CalJob[]; routes: CalRoute[] }>({
     queryKey: ["/api/calendar", startStr, endStr],
     queryFn: async () => {
       const r = await fetch(`/api/calendar?startDate=${startStr}&endDate=${endStr}`);
       if (!r.ok) throw new Error("Failed to load calendar");
       return r.json();
     },
+  });
+
+  const deleteRoute = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/canvassing/routes/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed to delete route");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar"] });
+      toast({ title: "Route removed" });
+    },
+    onError: () => toast({ title: "Error removing route", variant: "destructive" }),
   });
 
   const dayJobs = useMemo(() => {
@@ -110,16 +125,16 @@ export default function CalendarPage() {
     return map;
   }, [data]);
 
-  const daySessions = useMemo(() => {
-    const map: Record<string, CalSession[]> = {};
-    (data?.sessions ?? []).forEach(s => {
-      map[s.sessionDate] = [...(map[s.sessionDate] ?? []), s];
+  const dayRoutes = useMemo(() => {
+    const map: Record<string, CalRoute[]> = {};
+    (data?.routes ?? []).forEach(r => {
+      map[r.date] = [...(map[r.date] ?? []), r];
     });
     return map;
   }, [data]);
 
   const selJobs = dayJobs[selectedDate] ?? [];
-  const selSessions = daySessions[selectedDate] ?? [];
+  const selRoutes = dayRoutes[selectedDate] ?? [];
 
   // Group selected jobs by technician
   const jobsByTech = useMemo(() => {
@@ -178,7 +193,7 @@ export default function CalendarPage() {
           const isSelected = ds === selectedDate;
           const isToday = ds === toDateStr(new Date());
           const jobCount = (dayJobs[ds] ?? []).length;
-          const sessionCount = (daySessions[ds] ?? []).length;
+          const routeCount = (dayRoutes[ds] ?? []).length;
 
           return (
             <button
@@ -203,8 +218,8 @@ export default function CalendarPage() {
                 {jobCount > 0 && (
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title={`${jobCount} job${jobCount > 1 ? "s" : ""}`} />
                 )}
-                {sessionCount > 0 && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title={`${sessionCount} route${sessionCount > 1 ? "s" : ""}`} />
+                {routeCount > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title={`${routeCount} route${routeCount > 1 ? "s" : ""}`} />
                 )}
               </div>
             </button>
@@ -290,17 +305,17 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Routes / Canvassing Sessions column */}
+        {/* Routes column */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Map className="w-4 h-4 text-amber-500" />
             <h3 className="font-bold text-base text-slate-900">Canvassing Routes</h3>
-            {selSessions.length > 0 && (
-              <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{selSessions.length}</span>
+            {selRoutes.length > 0 && (
+              <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{selRoutes.length}</span>
             )}
           </div>
 
-          {selSessions.length === 0 ? (
+          {selRoutes.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-slate-200 p-8 text-center text-slate-400">
               <Map className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm font-medium">No routes planned</p>
@@ -313,38 +328,39 @@ export default function CalendarPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {selSessions.map(s => (
-                <Card key={s.id} className="!p-3 sm:!p-4 border-l-4 border-l-amber-400 bg-amber-50/40">
+              {selRoutes.map(r => (
+                <Card key={r.id} className="!p-3 sm:!p-4 border-l-4 border-l-amber-400 bg-amber-50/40">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-bold text-sm text-slate-900">{s.canvasser}</p>
-                      {(s.neighborhood || s.route) && (
-                        <p className="text-xs text-slate-600 mt-0.5">
-                          {s.neighborhood}{s.neighborhood && s.route ? " · " : ""}{s.route}
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-slate-900">
+                        {r.repName || r.repEmail}
+                      </p>
+                      {(r.neighborhood || r.routeName) && (
+                        <p className="text-xs text-slate-600 mt-0.5 truncate">
+                          {r.neighborhood}{r.neighborhood && r.routeName ? " · " : ""}{r.routeName}
                         </p>
                       )}
+                      {r.notes && (
+                        <p className="text-xs text-amber-800 mt-1 italic">{r.notes}</p>
+                      )}
                     </div>
-                    <Badge variant="warning">ROUTE</Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        r.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                        r.status === "active" ? "bg-blue-100 text-blue-700" :
+                        "bg-amber-100 text-amber-700"
+                      }`}>
+                        {r.status}
+                      </span>
+                      <button
+                        onClick={() => deleteRoute.mutate(r.id)}
+                        className="text-slate-300 hover:text-red-400 transition-colors"
+                        title="Remove route"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  {(s.doorsKnocked > 0 || s.goodConversations > 0 || s.closes > 0) && (
-                    <div className="flex gap-4 mt-2 pt-2 border-t border-amber-200">
-                      {s.doorsKnocked > 0 && (
-                        <span className="text-xs text-slate-500">
-                          <span className="font-bold text-slate-700">{s.doorsKnocked}</span> doors
-                        </span>
-                      )}
-                      {s.goodConversations > 0 && (
-                        <span className="text-xs text-slate-500">
-                          <span className="font-bold text-slate-700">{s.goodConversations}</span> convos
-                        </span>
-                      )}
-                      {s.closes > 0 && (
-                        <span className="text-xs text-emerald-700">
-                          <span className="font-bold">{s.closes}</span> closes
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </Card>
               ))}
             </div>
@@ -362,7 +378,7 @@ export default function CalendarPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Add Route modal — creates a new canvassing session for a given day
+// Add Route modal — writes to shared canvassing_routes table
 // ---------------------------------------------------------------------------
 function AddRouteModal({ isOpen, onClose, defaultDate }: { isOpen: boolean; onClose: () => void; defaultDate: string }) {
   const queryClient = useQueryClient();
@@ -370,7 +386,7 @@ function AddRouteModal({ isOpen, onClose, defaultDate }: { isOpen: boolean; onCl
 
   const mutation = useMutation({
     mutationFn: async (data: Record<string, any>) => {
-      const r = await fetch("/api/canvassing/sessions", {
+      const r = await fetch("/api/canvassing/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -383,7 +399,6 @@ function AddRouteModal({ isOpen, onClose, defaultDate }: { isOpen: boolean; onCl
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/canvassing/sessions"] });
       toast({ title: "Route added!", description: "Visible in the canvassing app route schedule." });
       onClose();
     },
@@ -393,37 +408,40 @@ function AddRouteModal({ isOpen, onClose, defaultDate }: { isOpen: boolean; onCl
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const repRaw = fd.get("rep") as string;
+    const repMap: Record<string, { email: string; name: string }> = {
+      zak:    { email: "zakarino100@gmail.com", name: "Zak" },
+      naseem: { email: "naseem@healthyhome.com", name: "Naseem" },
+    };
+    const rep = repMap[repRaw] ?? { email: repRaw, name: repRaw };
     mutation.mutate({
-      canvasser: fd.get("canvasser") as string,
-      sessionDate: fd.get("sessionDate") as string,
+      date: fd.get("date") as string,
+      repEmail: rep.email,
+      repName: rep.name,
       neighborhood: (fd.get("neighborhood") as string) || null,
-      route: (fd.get("route") as string) || null,
-      doorsKnocked: 0,
-      peopleReached: 0,
-      goodConversations: 0,
-      quotesGiven: 0,
-      closes: 0,
-      revenueSold: "0",
+      routeName: (fd.get("routeName") as string) || null,
+      notes: (fd.get("notes") as string) || null,
+      status: "planned",
     });
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add Canvassing Route">
       <p className="text-sm text-slate-500 mb-4">
-        Routes added here appear in the canvassing app's schedule and vice versa — both apps share the same session data.
+        Routes added here are stored in the shared canvassing routes table — visible in both this schedule and the canvassing app.
       </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Date *</Label>
-            <Input type="date" name="sessionDate" defaultValue={defaultDate} required />
+            <Input type="date" name="date" defaultValue={defaultDate} required />
           </div>
           <div>
-            <Label>Canvasser *</Label>
-            <Select name="canvasser" required defaultValue="">
+            <Label>Rep *</Label>
+            <Select name="rep" required defaultValue="">
               <option value="" disabled>Select...</option>
-              <option value="zakarino100@gmail.com">Zak</option>
-              <option value="naseem@healthyhome.com">Naseem</option>
+              <option value="zak">Zak</option>
+              <option value="naseem">Naseem</option>
               <option value="other">Other</option>
             </Select>
           </div>
@@ -434,7 +452,11 @@ function AddRouteModal({ isOpen, onClose, defaultDate }: { isOpen: boolean; onCl
         </div>
         <div>
           <Label>Route Name / Description</Label>
-          <Input name="route" placeholder="e.g. Sorrell Brook loop, Grid A" />
+          <Input name="routeName" placeholder="e.g. Sorrell Brook loop, Grid A" />
+        </div>
+        <div>
+          <Label>Notes</Label>
+          <Input name="notes" placeholder="Any notes about this route..." />
         </div>
         <div className="pt-2 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
