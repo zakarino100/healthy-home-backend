@@ -6,6 +6,8 @@ import { PageLoader, ErrorState, Card, Button, Badge, Modal, Input, Select, Labe
 import { Plus, Check, Calendar, DollarSign, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+export const TECHNICIANS = ["Naseem", "Zak"];
+
 type FilterType = "all" | "scheduled" | "completed";
 
 type PendingSale = {
@@ -282,7 +284,10 @@ function ScheduleModal({ sale, onClose }: { sale: PendingSale; onClose: () => vo
         </div>
         <div>
           <Label>Assign Technician</Label>
-          <Input type="text" name="technicianAssigned" placeholder="Technician name" />
+          <Select name="technicianAssigned">
+            <option value="">Unassigned</option>
+            {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
+          </Select>
         </div>
         <div className="pt-2 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
@@ -370,7 +375,10 @@ function CreateJobModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
           </div>
           <div>
             <Label>Technician</Label>
-            <Input type="text" name="technicianAssigned" placeholder="Name" />
+            <Select name="technicianAssigned">
+              <option value="">Unassigned</option>
+              {TECHNICIANS.map(t => <option key={t} value={t}>{t}</option>)}
+            </Select>
           </div>
         </div>
 

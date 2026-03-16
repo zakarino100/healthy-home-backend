@@ -13,6 +13,7 @@ import {
   Droplets,
   Bell,
   UserSearch,
+  CalendarRange,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/canvassing", label: "Canvassing", icon: Map },
   { href: "/leads", label: "Leads", icon: UserSearch },
   { href: "/jobs", label: "Jobs", icon: Wrench },
+  { href: "/calendar", label: "Schedule", icon: CalendarRange },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/reviews", label: "Reviews", icon: Star },
   { href: "/reports", label: "Reports", icon: FileText },

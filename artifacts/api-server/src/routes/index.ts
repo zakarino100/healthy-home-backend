@@ -8,6 +8,7 @@ import reviewsRouter from "./reviews";
 import contentRouter from "./content";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
+import calendarRouter from "./calendar";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use("/reviews", reviewsRouter);
 router.use("/content", contentRouter);
 router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportsRouter);
+router.use("/calendar", calendarRouter);
 
 export default router;
