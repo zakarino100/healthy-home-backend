@@ -10,6 +10,7 @@ import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import calendarRouter from "./calendar";
 import tasksRouter from "./tasks";
+import phoneRouter from "./phone";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportsRouter);
 router.use("/calendar", calendarRouter);
 router.use("/tasks", tasksRouter);
+router.use("/phone", phoneRouter);
 
 export default router;

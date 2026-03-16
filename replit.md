@@ -172,6 +172,26 @@ pnpm --filter @workspace/api-spec run codegen
 cd lib/api-client-react && pnpm exec tsc --build  # rebuild declarations
 ```
 
+## AI Phone Receptionist (Vapi)
+
+**Table:** `hh_call_logs` — stores every inbound call handled by the receptionist
+**Routes:** `GET|POST /api/phone/*` — webhook + call log listing endpoints
+**Dashboard page:** `/calls` — call log with transcript expand, date/status filters, pagination
+
+### Setup required (one-time in Vapi dashboard)
+1. Set env secrets: `VAPI_API_KEY`, `VAPI_WEBHOOK_SECRET`, `ELEVENLABS_VOICE_ID`, `OWNER_PHONE`
+2. In Vapi dashboard → Phone Numbers → set inbound webhook URL to `https://[replit-domain]/api/phone/webhook`
+3. Enable dynamic assistant config (backend returns config on `assistant-request`)
+4. Go to Integrations → add ElevenLabs API key
+
+### Key design decisions
+- Single `POST /api/phone/webhook` handles all Vapi events — `assistant-request` returns live config, `end-of-call-report` logs the call, all others return 200
+- HMAC signature verification via `x-vapi-signature` header (dev bypass when secret is not set)
+- Upsert on `provider_call_id` ensures webhook retries don't create duplicates
+- DB write failures return 200 to Vapi to prevent retry loops
+- Warm transfer requires Twilio telephony (not Vapi-native numbers)
+- After `lib/db` schema changes: run `pnpm --filter @workspace/db exec tsc -p tsconfig.json` to regenerate `.d.ts`
+
 ## DB Migrations
 
 For simple additive schema changes:

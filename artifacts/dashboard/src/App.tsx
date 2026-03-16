@@ -17,6 +17,7 @@ import UsersPage from "@/pages/users";
 import LeadsPage from "@/pages/leads";
 import CalendarPage from "@/pages/calendar";
 import TasksPage from "@/pages/tasks";
+import CallsPage from "@/pages/calls";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ function Router() {
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/tasks" component={TasksPage} />
         <Route path="/users" component={UsersPage} />
+        <Route path="/calls" component={CallsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

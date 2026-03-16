@@ -15,6 +15,7 @@ import {
   UserSearch,
   CalendarRange,
   CheckSquare,
+  PhoneIncoming,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/reviews", label: "Reviews", icon: Star },
   { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/reports", label: "Reports", icon: FileText },
+  { href: "/calls", label: "Calls", icon: PhoneIncoming },
   { href: "/users", label: "Team", icon: UserCog },
 ];
 
