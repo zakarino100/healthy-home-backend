@@ -6,8 +6,9 @@ import {
   reviewWorkflowsTable,
   leadsTable,
   leadDetailsTable,
+  customersTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, sql, or } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -211,6 +212,46 @@ router.get("/weekly", async (req, res) => {
         lte(jobsTable.completedAt, weekEndDate),
       ));
 
+    // Jobs scheduled this week (not yet completed)
+    const [weekScheduled] = await db
+      .select({
+        totalScheduled: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
+        scheduledValue: sql<number>`coalesce(sum(${jobsTable.soldPrice}::numeric), 0)`.mapWith(Number),
+      })
+      .from(jobsTable)
+      .where(and(
+        eq(jobsTable.status, "scheduled"),
+        gte(jobsTable.scheduledAt, weekStartDate),
+        lte(jobsTable.scheduledAt, weekEndDate),
+      ));
+
+    // Full job list for this week (scheduled + completed), with customer name
+    const weekJobsList = await db
+      .select({
+        id: jobsTable.id,
+        serviceType: jobsTable.serviceType,
+        status: jobsTable.status,
+        scheduledAt: jobsTable.scheduledAt,
+        completedAt: jobsTable.completedAt,
+        technicianAssigned: jobsTable.technicianAssigned,
+        soldPrice: jobsTable.soldPrice,
+        paymentAmountCollected: jobsTable.paymentAmountCollected,
+        customerFirstName: customersTable.firstName,
+        customerLastName: customersTable.lastName,
+        customerAddress: customersTable.address,
+        customerCity: customersTable.city,
+      })
+      .from(jobsTable)
+      .leftJoin(customersTable, eq(customersTable.id, jobsTable.customerId))
+      .where(and(
+        or(
+          and(eq(jobsTable.status, "scheduled"), gte(jobsTable.scheduledAt, weekStartDate), lte(jobsTable.scheduledAt, weekEndDate)),
+          and(eq(jobsTable.status, "completed"), gte(jobsTable.completedAt, weekStartDate), lte(jobsTable.completedAt, weekEndDate)),
+        )
+      ))
+      .orderBy(jobsTable.scheduledAt)
+      .limit(50);
+
     // Canvasser leaderboard from sold leads
     const canvasserStats = await db
       .select({
@@ -283,6 +324,20 @@ router.get("/weekly", async (req, res) => {
       totalSold: revenueSold,
       totalCollected: weekJobs.cashCollected ?? 0,
       totalCompleted: weekJobs.totalCompleted ?? 0,
+      totalScheduled: weekScheduled.totalScheduled ?? 0,
+      scheduledValue: weekScheduled.scheduledValue ?? 0,
+      weekJobsList: weekJobsList.map(j => ({
+        id: j.id,
+        serviceType: j.serviceType,
+        status: j.status,
+        scheduledAt: j.scheduledAt,
+        completedAt: j.completedAt,
+        technicianAssigned: j.technicianAssigned,
+        soldPrice: j.soldPrice,
+        paymentAmountCollected: j.paymentAmountCollected,
+        customerName: [j.customerFirstName, j.customerLastName].filter(Boolean).join(" ") || "Unknown",
+        customerAddress: [j.customerAddress, j.customerCity].filter(Boolean).join(", ") || null,
+      })),
       closeRate: Math.round(weekCloseRate * 10) / 10,
       averageTicket: Math.round(weekAvgTicket * 100) / 100,
       bundleRate: Math.round(weekBundleRate * 10) / 10,

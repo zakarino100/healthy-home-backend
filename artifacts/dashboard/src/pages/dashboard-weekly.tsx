@@ -1,7 +1,7 @@
 import { useGetDashboardWeekly } from "@workspace/api-client-react";
 import { formatCurrency, formatPercentage, formatDate } from "@/lib/utils";
-import { StatCard, PageLoader, ErrorState, Card } from "@/components/ui-components";
-import { Trophy, TrendingUp, AlertTriangle } from "lucide-react";
+import { StatCard, PageLoader, ErrorState, Card, Badge } from "@/components/ui-components";
+import { Trophy, TrendingUp, AlertTriangle, Wrench, CheckCircle2, CalendarClock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -34,6 +34,112 @@ export default function DashboardWeekly() {
         <StatCard title="Jobs Done" value={data.totalCompleted} delay="delay-300" />
         <StatCard title="Close Rate" value={formatPercentage(data.closeRate)} delay="delay-400" />
       </div>
+
+      {/* Jobs This Week */}
+      <Card className="!p-4 sm:!p-6">
+        <h3 className="text-lg sm:text-xl font-display font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <Wrench className="w-5 h-5 text-blue-500" />
+          Jobs This Week
+        </h3>
+
+        {/* Mini stat pills */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <div className="bg-blue-50 rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <CalendarClock className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Scheduled</span>
+            </div>
+            <p className="text-2xl font-display font-bold text-blue-900">{data.totalScheduled}</p>
+            {data.scheduledValue > 0 && (
+              <p className="text-xs text-blue-600 mt-0.5">{formatCurrency(data.scheduledValue)} pending</p>
+            )}
+          </div>
+          <div className="bg-emerald-50 rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Serviced</span>
+            </div>
+            <p className="text-2xl font-display font-bold text-emerald-900">{data.totalCompleted}</p>
+            <p className="text-xs text-emerald-600 mt-0.5">jobs done</p>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3 sm:col-span-1 col-span-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <DollarSign className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Cash Collected</span>
+            </div>
+            <p className="text-2xl font-display font-bold text-slate-900">{formatCurrency(data.totalCollected)}</p>
+            <p className="text-xs text-slate-500 mt-0.5">from completed jobs</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-3 sm:col-span-1 col-span-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Wrench className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Total Jobs</span>
+            </div>
+            <p className="text-2xl font-display font-bold text-amber-900">{data.totalScheduled + data.totalCompleted}</p>
+            <p className="text-xs text-amber-600 mt-0.5">this week</p>
+          </div>
+        </div>
+
+        {/* Jobs table */}
+        {data.weekJobsList.length === 0 ? (
+          <div className="rounded-xl border-2 border-dashed border-slate-200 py-8 text-center">
+            <Wrench className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+            <p className="text-sm text-slate-400">No jobs scheduled or completed this week.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-left min-w-[540px]">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500 text-xs">
+                  <th className="pb-2 font-semibold">Customer</th>
+                  <th className="pb-2 font-semibold hidden sm:table-cell">Service</th>
+                  <th className="pb-2 font-semibold">Technician</th>
+                  <th className="pb-2 font-semibold">Date</th>
+                  <th className="pb-2 font-semibold">Status</th>
+                  <th className="pb-2 font-semibold text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.weekJobsList.map(job => {
+                  const dateStr = job.scheduledAt
+                    ? new Date(job.scheduledAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    : job.completedAt
+                      ? new Date(job.completedAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                      : "—";
+                  const amount = job.status === "completed"
+                    ? job.paymentAmountCollected
+                    : job.soldPrice;
+                  return (
+                    <tr key={job.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 pr-3">
+                        <p className="font-bold text-sm text-slate-900 leading-tight">{job.customerName}</p>
+                        {job.customerAddress && (
+                          <p className="text-xs text-slate-400 truncate max-w-[140px]">{job.customerAddress}</p>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3 hidden sm:table-cell">
+                        <span className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                          {job.serviceType.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-3 text-sm text-slate-700">{job.technicianAssigned || "—"}</td>
+                      <td className="py-2.5 pr-3 text-xs text-slate-600 whitespace-nowrap">{dateStr}</td>
+                      <td className="py-2.5 pr-3">
+                        <Badge variant={job.status === "completed" ? "success" : "default"}>
+                          {job.status === "completed" ? "Serviced" : "Scheduled"}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 text-right font-bold text-sm text-slate-900">
+                        {amount ? formatCurrency(amount) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-8">
         <Card className="lg:col-span-2 flex flex-col !p-4 sm:!p-6">

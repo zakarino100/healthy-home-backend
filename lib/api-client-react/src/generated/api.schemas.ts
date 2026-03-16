@@ -401,12 +401,28 @@ export interface TechStat {
   cashCollected: number;
 }
 
+export interface WeekJobItem {
+  id: number;
+  serviceType: string;
+  status: string;
+  scheduledAt: string | null;
+  completedAt: string | null;
+  technicianAssigned: string | null;
+  soldPrice: string | null;
+  paymentAmountCollected: string | null;
+  customerName: string;
+  customerAddress: string | null;
+}
+
 export interface DashboardWeekly {
   startDate: string;
   endDate: string;
   totalSold: number;
   totalCollected: number;
   totalCompleted: number;
+  totalScheduled: number;
+  scheduledValue: number;
+  weekJobsList: WeekJobItem[];
   closeRate: number;
   averageTicket: number;
   bundleRate: number;
