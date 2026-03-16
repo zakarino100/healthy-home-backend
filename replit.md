@@ -71,8 +71,12 @@ Connection string stored in `SUPABASE_DATABASE_URL` env var; `lib/db/src/index.t
 | `content.ts` | `hh_job_content` | Before/after photos, video |
 | `reports.ts` | `hh_daily_reports` | Persisted daily report + Robin payload |
 | `users.ts` | `hh_users` | HH team members |
+| `routes.ts` → `canvassingRoutesTable` | `canvassing_routes` | Shared (no `hh_` prefix) — D2D app can also read/write this |
+| `tasks.ts` → `tasksTable` | `hh_tasks` | Follow-up tasks linked to jobs, leads, sessions, customers |
 
 All `hh_*` tables use **TEXT** fields for status/enum columns (no pgEnum) to avoid conflicts with the live DB's existing enum types.
+
+All core HH tables (`hh_canvassing_sessions`, `hh_jobs`, `hh_lead_details`, `hh_customers`) have `sync_source` and `updated_by` columns for data provenance tracking.
 
 ### leads table mapping (API boundary)
 
@@ -84,8 +88,6 @@ All `hh_*` tables use **TEXT** fields for status/enum columns (no pgEnum) to avo
 | `serviceInterest` | `services_interested[0]` |
 | `followUpDate` | `next_followup_at` |
 | `id` | `id` (UUID, not integer) |
-
-| `routes.ts` → `canvassingRoutesTable` | `canvassing_routes` | Shared route planning table — no `hh_` prefix so the D2D app can also read/write it |
 
 ### Schema changes
 
@@ -111,6 +113,7 @@ For shared tables (no `hh_` prefix, accessible to both apps): create via SQL mig
 | Content | GET/PUT /api/content/:jobId |
 | Dashboard | GET /api/dashboard/today, GET /api/dashboard/weekly |
 | Calendar | GET /api/calendar — returns `jobs` + `routes` (from `canvassing_routes`) |
+| Tasks | GET/POST /api/tasks, GET/PUT/DELETE /api/tasks/:id |
 | Reports | GET /api/reports/daily, POST /api/reports/daily/generate, GET /api/reports/daily/:date/export?format=json|csv |
 
 ## Key Business Logic
@@ -132,7 +135,7 @@ Canonical snake_case payload structure:
 {
   "business_name": "Healthy Home",
   "report_date": "YYYY-MM-DD",
-  "sales_metrics": { "doors_knocked", "good_conversations", "quotes_given", "closes", "close_rate_pct", "revenue_sold", "average_ticket", "bundles_sold" },
+  "sales_metrics": { "doors_knocked", "people_reached", "contact_rate_pct", "not_home", "no_answer", "callbacks_requested", "good_conversations", "quotes_given", "closes", "close_rate_pct", "revenue_sold", "average_ticket", "bundles_sold", "driveaway_addons" },
   "fulfillment_metrics": { "jobs_completed", "cash_collected", "jobs_scheduled_tomorrow" },
   "review_metrics": { "satisfaction_requests_sent", "positive_responses", "negative_responses", "reviews_received" },
   "team_metrics": { "top_canvasser", "top_technician", "canvasser_count_active_today" },

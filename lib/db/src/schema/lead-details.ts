@@ -20,6 +20,9 @@ export const leadDetailsTable = pgTable("hh_lead_details", {
   isBundle: boolean("is_bundle").notNull().default(false),
   jobId: integer("job_id"),
   notes: text("notes"),
+  // Item 2 — sync provenance
+  syncSource: text("sync_source"),
+  updatedBy: text("updated_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

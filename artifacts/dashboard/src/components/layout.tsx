@@ -14,6 +14,7 @@ import {
   Bell,
   UserSearch,
   CalendarRange,
+  CheckSquare,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/calendar", label: "Schedule", icon: CalendarRange },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/reviews", label: "Reviews", icon: Star },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/users", label: "Team", icon: UserCog },
 ];

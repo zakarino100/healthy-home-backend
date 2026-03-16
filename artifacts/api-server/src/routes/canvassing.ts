@@ -159,6 +159,12 @@ router.post("/sessions", async (req, res) => {
       bundleCount: body.bundleCount ?? 0,
       driveawayAddOnCount: body.driveawayAddOnCount ?? 0,
       notes: body.notes ?? null,
+      notHome: body.notHome ?? 0,
+      noAnswer: body.noAnswer ?? 0,
+      callbacksRequested: body.callbacksRequested ?? 0,
+      syncSource: body.syncSource ?? "dashboard",
+      updatedBy: body.updatedBy ?? null,
+      routeId: body.routeId ?? null,
     }).returning();
     res.status(201).json(session);
   } catch (err) {
@@ -199,6 +205,12 @@ router.put("/sessions/:id", async (req, res) => {
         bundleCount: body.bundleCount ?? 0,
         driveawayAddOnCount: body.driveawayAddOnCount ?? 0,
         notes: body.notes ?? null,
+        notHome: body.notHome ?? 0,
+        noAnswer: body.noAnswer ?? 0,
+        callbacksRequested: body.callbacksRequested ?? 0,
+        syncSource: body.syncSource ?? undefined,
+        updatedBy: body.updatedBy ?? null,
+        routeId: body.routeId ?? undefined,
         updatedAt: new Date(),
       })
       .where(eq(canvassingSessionsTable.id, id))

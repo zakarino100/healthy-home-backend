@@ -33,11 +33,16 @@ export async function buildRobinPayload(date: string) {
   const [canvasTotals] = await db
     .select({
       doorsKnocked: sql<number>`coalesce(sum(${canvassingSessionsTable.doorsKnocked}), 0)`.mapWith(Number),
+      peopleReached: sql<number>`coalesce(sum(${canvassingSessionsTable.peopleReached}), 0)`.mapWith(Number),
       goodConversations: sql<number>`coalesce(sum(${canvassingSessionsTable.goodConversations}), 0)`.mapWith(Number),
       quotesGiven: sql<number>`coalesce(sum(${canvassingSessionsTable.quotesGiven}), 0)`.mapWith(Number),
       closes: sql<number>`coalesce(sum(${canvassingSessionsTable.closes}), 0)`.mapWith(Number),
       revenueSold: sql<number>`coalesce(sum(${canvassingSessionsTable.revenueSold}::numeric), 0)`.mapWith(Number),
       bundlesSold: sql<number>`coalesce(sum(${canvassingSessionsTable.bundleCount}), 0)`.mapWith(Number),
+      driveawayAddOns: sql<number>`coalesce(sum(${canvassingSessionsTable.driveawayAddOnCount}), 0)`.mapWith(Number),
+      notHome: sql<number>`coalesce(sum(${canvassingSessionsTable.notHome}), 0)`.mapWith(Number),
+      noAnswer: sql<number>`coalesce(sum(${canvassingSessionsTable.noAnswer}), 0)`.mapWith(Number),
+      callbacksRequested: sql<number>`coalesce(sum(${canvassingSessionsTable.callbacksRequested}), 0)`.mapWith(Number),
       canvasserCount: sql<number>`coalesce(count(distinct ${canvassingSessionsTable.canvasser}), 0)`.mapWith(Number),
     })
     .from(canvassingSessionsTable)
@@ -48,8 +53,11 @@ export async function buildRobinPayload(date: string) {
   const revenueSold = canvasTotals.revenueSold ?? 0;
   const goodConversations = canvasTotals.goodConversations ?? 0;
   const bundlesSold = canvasTotals.bundlesSold ?? 0;
+  const peopleReached = canvasTotals.peopleReached ?? 0;
+  const doorsKnocked = canvasTotals.doorsKnocked ?? 0;
   const closeRatePct = quotesGiven > 0 ? Math.round((closes / quotesGiven) * 1000) / 10 : 0;
   const averageTicket = closes > 0 ? Math.round((revenueSold / closes) * 100) / 100 : 0;
+  const contactRatePct = doorsKnocked > 0 ? Math.round((peopleReached / doorsKnocked) * 1000) / 10 : 0;
 
   // Job totals for day
   const [jobTotals] = await db
@@ -180,7 +188,12 @@ export async function buildRobinPayload(date: string) {
     business_name: BUSINESS_NAME,
     report_date: date,
     sales_metrics: {
-      doors_knocked: canvasTotals.doorsKnocked ?? 0,
+      doors_knocked: doorsKnocked,
+      people_reached: peopleReached,
+      contact_rate_pct: contactRatePct,
+      not_home: canvasTotals.notHome ?? 0,
+      no_answer: canvasTotals.noAnswer ?? 0,
+      callbacks_requested: canvasTotals.callbacksRequested ?? 0,
       good_conversations: goodConversations,
       quotes_given: quotesGiven,
       closes,
@@ -188,6 +201,7 @@ export async function buildRobinPayload(date: string) {
       revenue_sold: revenueSold,
       average_ticket: averageTicket,
       bundles_sold: bundlesSold,
+      driveaway_addons: canvasTotals.driveawayAddOns ?? 0,
     },
     fulfillment_metrics: {
       jobs_completed: jobTotals.jobsCompleted ?? 0,

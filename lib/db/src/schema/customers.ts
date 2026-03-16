@@ -21,6 +21,9 @@ export const customersTable = pgTable("hh_customers", {
   notes: text("notes"),
   optOut: boolean("opt_out").notNull().default(false),
   reviewCampaignEligible: boolean("review_campaign_eligible").notNull().default(false),
+  // Item 2 — sync provenance
+  syncSource: text("sync_source"),
+  updatedBy: text("updated_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -30,6 +30,9 @@ export const jobsTable = pgTable("hh_jobs", {
   notes: text("notes"),
   satisfactionWorkflowTriggered: boolean("satisfaction_workflow_triggered").notNull().default(false),
   leadId: uuid("lead_id"),
+  // Item 2 — sync provenance
+  syncSource: text("sync_source"),
+  updatedBy: text("updated_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

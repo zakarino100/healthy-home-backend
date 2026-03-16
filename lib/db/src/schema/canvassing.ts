@@ -32,6 +32,15 @@ export const hhCanvassingSessionsTable = pgTable("hh_canvassing_sessions", {
   bundleCount: integer("bundle_count").notNull().default(0),
   driveawayAddOnCount: integer("driveway_addon_count").notNull().default(0),
   notes: text("notes"),
+  // Item 1 — activity outcome columns
+  notHome: integer("not_home").notNull().default(0),
+  noAnswer: integer("no_answer").notNull().default(0),
+  callbacksRequested: integer("callbacks_requested").notNull().default(0),
+  // Item 2 — sync provenance
+  syncSource: text("sync_source"),
+  updatedBy: text("updated_by"),
+  // Item 7 — route link
+  routeId: integer("route_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

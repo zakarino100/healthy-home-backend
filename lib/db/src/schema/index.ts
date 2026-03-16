@@ -7,3 +7,4 @@ export * from "./reviews";
 export * from "./content";
 export * from "./reports";
 export * from "./routes";
+export * from "./tasks";

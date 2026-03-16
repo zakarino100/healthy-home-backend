@@ -107,6 +107,9 @@ function CreateSessionModal({ isOpen, onClose }: { isOpen: boolean, onClose: () 
         neighborhood: fd.get("neighborhood") as string,
         doorsKnocked: parseInt(fd.get("doorsKnocked") as string) || 0,
         peopleReached: parseInt(fd.get("peopleReached") as string) || 0,
+        notHome: parseInt(fd.get("notHome") as string) || 0,
+        noAnswer: parseInt(fd.get("noAnswer") as string) || 0,
+        callbacksRequested: parseInt(fd.get("callbacksRequested") as string) || 0,
         goodConversations: parseInt(fd.get("goodConversations") as string) || 0,
         quotesGiven: parseInt(fd.get("quotesGiven") as string) || 0,
         closes: parseInt(fd.get("closes") as string) || 0,
@@ -137,10 +140,13 @@ function CreateSessionModal({ isOpen, onClose }: { isOpen: boolean, onClose: () 
         </div>
 
         <div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Activity Numbers</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Door Activity</p>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Doors Knocked</Label><Input type="number" name="doorsKnocked" min="0" defaultValue="0" inputMode="numeric" /></div>
             <div><Label>People Reached</Label><Input type="number" name="peopleReached" min="0" defaultValue="0" inputMode="numeric" /></div>
+            <div><Label>Not Home</Label><Input type="number" name="notHome" min="0" defaultValue="0" inputMode="numeric" /></div>
+            <div><Label>No Answer</Label><Input type="number" name="noAnswer" min="0" defaultValue="0" inputMode="numeric" /></div>
+            <div><Label>Callbacks Requested</Label><Input type="number" name="callbacksRequested" min="0" defaultValue="0" inputMode="numeric" /></div>
             <div><Label>Good Convos</Label><Input type="number" name="goodConversations" min="0" defaultValue="0" inputMode="numeric" /></div>
             <div><Label>Quotes Given</Label><Input type="number" name="quotesGiven" min="0" defaultValue="0" inputMode="numeric" /></div>
           </div>

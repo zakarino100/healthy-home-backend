@@ -9,6 +9,7 @@ import contentRouter from "./content";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import calendarRouter from "./calendar";
+import tasksRouter from "./tasks";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use("/content", contentRouter);
 router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportsRouter);
 router.use("/calendar", calendarRouter);
+router.use("/tasks", tasksRouter);
 
 export default router;
