@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-components";
 import { ChevronLeft, ChevronRight, Plus, Briefcase, Map, DollarSign } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { TECHNICIANS } from "@/pages/jobs";
+import { TECHNICIANS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
 
 // ---------------------------------------------------------------------------

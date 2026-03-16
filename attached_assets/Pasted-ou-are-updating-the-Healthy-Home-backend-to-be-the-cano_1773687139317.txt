@@ -1,0 +1,120 @@
+ou are updating the Healthy Home backend to be the canonical source of truth for the canvassing app and reporting.
+
+Core rules
+The backend must define the shared canonical data model
+The canvassing app must align to the backend
+Do not delete existing data
+Do not drop tables/collections/fields unless explicitly approved
+Do not erase historical records
+Prefer:
+additive changes
+backward-compatible migrations
+field/status mapping
+soft-deprecation
+auditability
+Business definitions to enforce
+Not Home is not a lead
+A lead only exists when there is actual engagement or actionable future sales potential:
+meaningful conversation
+expressed interest
+quote given
+callback requested
+follow-up required
+estimate scheduled
+contact info captured
+Canonical metric categories
+Keep these separate:
+
+Activity / attempts
+doors_knocked
+contact_attempts
+not_home
+no_answer / knocked_no_answer
+inaccessible
+do_not_knock
+revisit_needed
+Contact / conversation
+contacts_made
+good_conversations
+Lead pipeline
+leads_created
+warm_leads
+hot_leads
+quotes_given
+callbacks_requested
+followups_created
+estimates_scheduled
+Sales outcomes
+sales_won
+sales_lost
+revenue_sold
+bundles_sold
+jobs_scheduled
+Canonical statuses
+Prospect/contact statuses
+uncontacted
+knocked_no_answer
+not_home
+contacted
+not_interested
+revisit_needed
+inaccessible
+do_not_knock
+Lead statuses
+new_lead
+warm_lead
+hot_lead
+quote_pending
+quote_given
+callback_set
+followup_due
+estimate_scheduled
+won
+lost
+Job/customer statuses
+scheduled
+confirmed
+completed
+canceled
+reschedule_needed
+Required backend responsibilities
+Define the canonical schema/entities for:
+reps/users
+routes
+prospects
+leads
+customers
+quotes
+jobs
+notes
+follow-ups/tasks
+reviews
+activity events
+Support bidirectional sync with the canvassing app where appropriate
+
+Support route configuration and route sync
+
+Implement/report daily structured stats using the definitions above
+
+Prepare for review workflow:
+
+satisfaction first
+4–5 => Google review request
+1–3 => internal feedback/service recovery
+Ensure auditability:
+created_at
+updated_at
+updated_by
+sync source
+change history where practical
+Required output
+Provide:
+
+canonical schema proposal
+KPI definitions
+sync contract for app ↔ backend
+migration/refactor plan
+example daily report JSON
+risks / compatibility concerns
+Important constraint
+Do not solve inconsistencies by deleting or wiping data. Preserve historical data and migrate safely.

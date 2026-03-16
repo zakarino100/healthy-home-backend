@@ -6,7 +6,7 @@ import { PageLoader, ErrorState, Card, Button, Badge, Modal, Input, Select, Labe
 import { Plus, Check, Calendar, DollarSign, Clock, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-export const TECHNICIANS = ["Naseem", "Zak"];
+import { TECHNICIANS } from "@/lib/constants";
 
 type FilterType = "all" | "scheduled" | "completed";
 
@@ -167,23 +167,56 @@ export default function JobsPage() {
               <Badge variant={job.status === 'scheduled' ? 'default' : job.status === 'completed' ? 'success' : 'neutral'}>
                 {(job.status as string).replace(/_/g, " ").toUpperCase()}
               </Badge>
-              <span className="text-base sm:text-lg font-bold text-slate-900">{formatCurrency((job as any).soldPrice || (job as any).quotedPrice)}</span>
+              {(job.soldPrice || job.quotedPrice) && (
+                <span className="flex items-center gap-1 text-base sm:text-lg font-bold text-slate-900">
+                  <DollarSign className="w-4 h-4 text-emerald-500" />
+                  {formatCurrency(job.soldPrice || job.quotedPrice)}
+                </span>
+              )}
             </div>
 
             <h3 className="font-bold text-base sm:text-lg text-slate-900 mb-1">Customer #{job.customerId}</h3>
-            <p className="text-slate-500 text-xs sm:text-sm font-medium uppercase tracking-wider mb-3 sm:mb-4">
+            <p className="text-slate-500 text-xs sm:text-sm font-medium uppercase tracking-wider mb-3">
               {job.serviceType.replace(/_/g, ' ')}
             </p>
+
+            {/* Rep notes from canvasser */}
+            {job.repNotes && (
+              <div className="flex gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-3">
+                <MessageSquare className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-amber-600 uppercase tracking-wider block mb-0.5">Rep Note</span>
+                  <p className="text-xs text-amber-800 leading-relaxed">{job.repNotes}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Job / scheduler notes */}
+            {job.notes && (
+              <div className="flex gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 mb-3">
+                <MessageSquare className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Note</span>
+                  <p className="text-xs text-slate-600 leading-relaxed">{job.notes}</p>
+                </div>
+              </div>
+            )}
 
             <div className="mt-auto space-y-2 sm:space-y-3 pt-3 sm:pt-4 border-t border-slate-100">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Scheduled:</span>
-                <span className="font-bold text-slate-700">{formatDate((job as any).scheduledAt)}</span>
+                <span className="font-bold text-slate-700">{formatDate(job.scheduledAt)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Technician:</span>
-                <span className="font-bold text-slate-700">{(job as any).technicianAssigned || 'Unassigned'}</span>
+                <span className="font-bold text-slate-700">{job.technicianAssigned || 'Unassigned'}</span>
               </div>
+              {job.status === 'completed' && job.paymentAmountCollected && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Collected:</span>
+                  <span className="font-bold text-emerald-600">{formatCurrency(job.paymentAmountCollected)}</span>
+                </div>
+              )}
 
               {job.status === 'scheduled' && (
                 <Button
