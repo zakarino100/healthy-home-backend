@@ -6,6 +6,7 @@ import {
   numeric,
   timestamp,
   boolean,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -28,6 +29,7 @@ export const jobsTable = pgTable("hh_jobs", {
   paymentAmountCollected: numeric("payment_amount_collected", { precision: 10, scale: 2 }),
   notes: text("notes"),
   satisfactionWorkflowTriggered: boolean("satisfaction_workflow_triggered").notNull().default(false),
+  leadId: uuid("lead_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

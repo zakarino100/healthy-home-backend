@@ -320,13 +320,16 @@ export default function LeadsPage() {
 function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [status, setStatus] = useState<string>("new");
 
   const createMutation = useCreateLead({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["/api/canvassing/leads"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/jobs/pending-sales"] });
         toast({ title: "Lead added successfully" });
         onClose();
+        setStatus("new");
       },
       onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
     },
@@ -345,14 +348,18 @@ function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
         city: (fd.get("city") as string) || undefined,
         state: (fd.get("state") as string) || undefined,
         zip: (fd.get("zip") as string) || undefined,
-        source: (fd.get("source") as any) || "other",
+        source: (fd.get("source") as any) || "d2d",
         serviceInterest: (fd.get("serviceInterest") as string) || undefined,
-        quoteAmount: (fd.get("quoteAmount") as string) || undefined,
-        status: "new",
+        quotePrice: (fd.get("quotePrice") as string) || undefined,
+        soldPrice: status === "sold" ? ((fd.get("soldPrice") as string) || undefined) : undefined,
+        isBundle: fd.get("isBundle") === "on",
+        status: status as any,
         notes: (fd.get("notes") as string) || undefined,
-      },
+      } as any,
     });
   };
+
+  const isSold = status === "sold";
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add New Lead">
@@ -362,14 +369,26 @@ function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
           <div><Label>Last Name</Label><Input name="lastName" placeholder="Smith" /></div>
         </div>
 
-        <div>
-          <Label>Source *</Label>
-          <Select name="source" required defaultValue="other">
-            <option value="d2d">Door-to-Door</option>
-            <option value="referral">Referral</option>
-            <option value="ad">Advertisement</option>
-            <option value="other">Other</option>
-          </Select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Source *</Label>
+            <Select name="source" required defaultValue="d2d">
+              <option value="d2d">Door-to-Door</option>
+              <option value="referral">Referral</option>
+              <option value="ad">Advertisement</option>
+              <option value="other">Other</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Status *</Label>
+            <Select name="status" value={status} onChange={e => setStatus(e.target.value)} required>
+              <option value="new">New / Not Home</option>
+              <option value="quoted">Quoted</option>
+              <option value="follow_up">Follow Up</option>
+              <option value="sold">Sold ✓</option>
+              <option value="lost">Lost</option>
+            </Select>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -385,8 +404,42 @@ function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Service Interest</Label><Input name="serviceInterest" placeholder="House wash" /></div>
-          <div><Label>Quote ($)</Label><Input type="number" step="0.01" name="quoteAmount" inputMode="decimal" /></div>
+          <div>
+            <Label>Service / Package</Label>
+            <Select name="serviceInterest" defaultValue="house_wash">
+              <option value="house_wash">House Wash</option>
+              <option value="driveway_cleaning">Driveway Cleaning</option>
+              <option value="bundle">Bundle Package</option>
+              <option value="other">Other</option>
+            </Select>
+          </div>
+          <div><Label>Quote Price ($)</Label><Input type="number" step="0.01" name="quotePrice" inputMode="decimal" placeholder="0.00" /></div>
+        </div>
+
+        {isSold && (
+          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Sale Details</p>
+            <div className="grid grid-cols-2 gap-3 items-end">
+              <div>
+                <Label>Sold Price ($) *</Label>
+                <Input type="number" step="0.01" name="soldPrice" required={isSold} inputMode="decimal" placeholder="0.00" className="border-emerald-300 focus:border-emerald-500" />
+              </div>
+              <div className="flex items-center gap-2 pb-2">
+                <input
+                  type="checkbox"
+                  name="isBundle"
+                  id="isBundle"
+                  className="w-4 h-4 rounded border-slate-300 text-primary"
+                />
+                <label htmlFor="isBundle" className="text-sm font-medium text-slate-700 cursor-pointer">Bundle sale?</label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>Canvasser / Rep</Label>
+          <Input name="canvasser" placeholder="Name or email" />
         </div>
 
         <div>
@@ -401,7 +454,13 @@ function AddLeadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
         <div className="pt-2 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" isLoading={createMutation.isPending}>Save Lead</Button>
+          <Button
+            type="submit"
+            isLoading={createMutation.isPending}
+            className={isSold ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+          >
+            {isSold ? "💰 Record Sale" : "Save Lead"}
+          </Button>
         </div>
       </form>
     </Modal>

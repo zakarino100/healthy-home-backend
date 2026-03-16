@@ -4,11 +4,14 @@ import {
   canvassingSessionsTable,
   jobsTable,
   reviewWorkflowsTable,
-  customersTable,
+  leadsTable,
+  leadDetailsTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql, sum, count } from "drizzle-orm";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
+
+const HH_BUSINESS_UNIT = "healthy_home";
 
 const KPI_TARGETS = {
   goodConversations: 20,
@@ -21,35 +24,52 @@ function toLocalDateString(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
+// ---------------------------------------------------------------------------
 // GET /dashboard/today
+// Activity (doors/convos/quotes) ← canvassing sessions
+// Closes + revenue + bundles   ← sold leads + hh_lead_details
+// Jobs completed + cash        ← hh_jobs
+// ---------------------------------------------------------------------------
 router.get("/today", async (req, res) => {
   try {
     const today = toLocalDateString(new Date());
     const tomorrow = toLocalDateString(new Date(Date.now() + 86400000));
+    const todayStart = new Date(today);
+    const todayEnd = new Date(tomorrow);
 
-    // Canvassing totals for today
-    const [canvassingTotals] = await db
+    // Activity from sessions
+    const [sessionTotals] = await db
       .select({
         doorsKnocked: sql<number>`coalesce(sum(${canvassingSessionsTable.doorsKnocked}), 0)`.mapWith(Number),
         goodConversations: sql<number>`coalesce(sum(${canvassingSessionsTable.goodConversations}), 0)`.mapWith(Number),
         quotesGiven: sql<number>`coalesce(sum(${canvassingSessionsTable.quotesGiven}), 0)`.mapWith(Number),
-        closes: sql<number>`coalesce(sum(${canvassingSessionsTable.closes}), 0)`.mapWith(Number),
-        revenueSold: sql<number>`coalesce(sum(${canvassingSessionsTable.revenueSold}::numeric), 0)`.mapWith(Number),
-        bundleCount: sql<number>`coalesce(sum(${canvassingSessionsTable.bundleCount}), 0)`.mapWith(Number),
       })
       .from(canvassingSessionsTable)
       .where(eq(canvassingSessionsTable.sessionDate, today));
 
-    const closes = canvassingTotals.closes ?? 0;
-    const quotesGiven = canvassingTotals.quotesGiven ?? 0;
+    // Closes + revenue from sold leads
+    const [leadTotals] = await db
+      .select({
+        closes: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
+        revenueSold: sql<number>`coalesce(sum(${leadDetailsTable.soldPrice}::numeric), 0)`.mapWith(Number),
+        bundleCount: sql<number>`coalesce(count(*) filter (where ${leadDetailsTable.isBundle} = true), 0)`.mapWith(Number),
+      })
+      .from(leadsTable)
+      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .where(and(
+        eq(leadsTable.status, "sold"),
+        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+        gte(leadsTable.createdAt, todayStart),
+        lte(leadsTable.createdAt, todayEnd),
+      ));
+
+    const closes = leadTotals.closes ?? 0;
+    const quotesGiven = sessionTotals.quotesGiven ?? 0;
+    const revenueSold = leadTotals.revenueSold ?? 0;
     const closeRate = quotesGiven > 0 ? (closes / quotesGiven) * 100 : 0;
-    const revenueSold = canvassingTotals.revenueSold ?? 0;
     const averageTicket = closes > 0 ? revenueSold / closes : 0;
 
     // Jobs completed today
-    const todayStart = new Date(today);
-    const todayEnd = new Date(todayStart.getTime() + 86400000);
-
     const [jobTotals] = await db
       .select({
         jobsCompleted: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
@@ -82,7 +102,6 @@ router.get("/today", async (req, res) => {
         lte(reviewWorkflowsTable.reviewCompletedAt, todayEnd),
       ));
 
-    // Unresolved issues
     const [issueCount] = await db
       .select({ count: sql<number>`coalesce(count(*), 0)`.mapWith(Number) })
       .from(reviewWorkflowsTable)
@@ -102,14 +121,14 @@ router.get("/today", async (req, res) => {
 
     res.json({
       date: today,
-      doorsKnocked: canvassingTotals.doorsKnocked ?? 0,
-      goodConversations: canvassingTotals.goodConversations ?? 0,
-      quotesGiven: canvassingTotals.quotesGiven ?? 0,
+      doorsKnocked: sessionTotals.doorsKnocked ?? 0,
+      goodConversations: sessionTotals.goodConversations ?? 0,
+      quotesGiven: sessionTotals.quotesGiven ?? 0,
       closes,
       closeRate: Math.round(closeRate * 10) / 10,
       revenueSold,
       averageTicket: Math.round(averageTicket * 100) / 100,
-      bundleCount: canvassingTotals.bundleCount ?? 0,
+      bundleCount: leadTotals.bundleCount ?? 0,
       jobsCompleted: jobTotals.jobsCompleted ?? 0,
       cashCollected: jobTotals.cashCollected ?? 0,
       reviewRequestsSent: reviewTotals.reviewRequestsSent ?? 0,
@@ -124,12 +143,13 @@ router.get("/today", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
 // GET /dashboard/weekly
+// ---------------------------------------------------------------------------
 router.get("/weekly", async (req, res) => {
   try {
     const { startDate, endDate } = req.query as Record<string, string | undefined>;
 
-    // Default to current week (Mon-Sun)
     const now = new Date();
     const dayOfWeek = now.getDay();
     const monday = new Date(now);
@@ -143,13 +163,10 @@ router.get("/weekly", async (req, res) => {
     const weekStartDate = new Date(weekStart);
     const weekEndDate = new Date(weekEnd);
 
-    // Canvassing totals for week
-    const [weekCanvas] = await db
+    // Activity from sessions
+    const [sessionTotals] = await db
       .select({
-        closes: sql<number>`coalesce(sum(${canvassingSessionsTable.closes}), 0)`.mapWith(Number),
         quotesGiven: sql<number>`coalesce(sum(${canvassingSessionsTable.quotesGiven}), 0)`.mapWith(Number),
-        revenueSold: sql<number>`coalesce(sum(${canvassingSessionsTable.revenueSold}::numeric), 0)`.mapWith(Number),
-        bundleCount: sql<number>`coalesce(sum(${canvassingSessionsTable.bundleCount}), 0)`.mapWith(Number),
       })
       .from(canvassingSessionsTable)
       .where(and(
@@ -157,15 +174,31 @@ router.get("/weekly", async (req, res) => {
         lte(canvassingSessionsTable.sessionDate, weekEnd),
       ));
 
-    const closes = weekCanvas.closes ?? 0;
-    const quotesGiven = weekCanvas.quotesGiven ?? 0;
-    const revenueSold = weekCanvas.revenueSold ?? 0;
-    const bundleCount = weekCanvas.bundleCount ?? 0;
+    // Closes + revenue from sold leads
+    const [leadTotals] = await db
+      .select({
+        closes: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
+        revenueSold: sql<number>`coalesce(sum(${leadDetailsTable.soldPrice}::numeric), 0)`.mapWith(Number),
+        bundleCount: sql<number>`coalesce(count(*) filter (where ${leadDetailsTable.isBundle} = true), 0)`.mapWith(Number),
+      })
+      .from(leadsTable)
+      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .where(and(
+        eq(leadsTable.status, "sold"),
+        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+        gte(leadsTable.createdAt, weekStartDate),
+        lte(leadsTable.createdAt, weekEndDate),
+      ));
+
+    const closes = leadTotals.closes ?? 0;
+    const quotesGiven = sessionTotals.quotesGiven ?? 0;
+    const revenueSold = leadTotals.revenueSold ?? 0;
+    const bundleCount = leadTotals.bundleCount ?? 0;
     const weekCloseRate = quotesGiven > 0 ? (closes / quotesGiven) * 100 : 0;
     const weekAvgTicket = closes > 0 ? revenueSold / closes : 0;
     const weekBundleRate = closes > 0 ? (bundleCount / closes) * 100 : 0;
 
-    // Job totals for week
+    // Jobs completed this week
     const [weekJobs] = await db
       .select({
         totalCompleted: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
@@ -178,30 +211,33 @@ router.get("/weekly", async (req, res) => {
         lte(jobsTable.completedAt, weekEndDate),
       ));
 
-    // Canvasser leaderboard
+    // Canvasser leaderboard from sold leads
     const canvasserStats = await db
       .select({
-        canvasser: canvassingSessionsTable.canvasser,
-        closes: sql<number>`coalesce(sum(${canvassingSessionsTable.closes}), 0)`.mapWith(Number),
-        revenueSold: sql<number>`coalesce(sum(${canvassingSessionsTable.revenueSold}::numeric), 0)`.mapWith(Number),
-        goodConversations: sql<number>`coalesce(sum(${canvassingSessionsTable.goodConversations}), 0)`.mapWith(Number),
-        quotesGiven: sql<number>`coalesce(sum(${canvassingSessionsTable.quotesGiven}), 0)`.mapWith(Number),
+        canvasser: leadsTable.assignedRepEmail,
+        closes: sql<number>`coalesce(count(*), 0)`.mapWith(Number),
+        revenueSold: sql<number>`coalesce(sum(${leadDetailsTable.soldPrice}::numeric), 0)`.mapWith(Number),
       })
-      .from(canvassingSessionsTable)
+      .from(leadsTable)
+      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(
-        gte(canvassingSessionsTable.sessionDate, weekStart),
-        lte(canvassingSessionsTable.sessionDate, weekEnd),
+        eq(leadsTable.status, "sold"),
+        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+        gte(leadsTable.createdAt, weekStartDate),
+        lte(leadsTable.createdAt, weekEndDate),
       ))
-      .groupBy(canvassingSessionsTable.canvasser)
-      .orderBy(sql`sum(${canvassingSessionsTable.closes}) DESC`);
+      .groupBy(leadsTable.assignedRepEmail)
+      .orderBy(sql`count(*) DESC`);
 
-    const canvasserLeaderboard = canvasserStats.map(c => ({
-      canvasser: c.canvasser,
-      closes: c.closes,
-      revenueSold: c.revenueSold,
-      goodConversations: c.goodConversations,
-      closeRate: c.quotesGiven > 0 ? Math.round((c.closes / c.quotesGiven) * 1000) / 10 : 0,
-    }));
+    const canvasserLeaderboard = canvasserStats
+      .filter(c => c.canvasser)
+      .map(c => ({
+        canvasser: c.canvasser!,
+        closes: c.closes,
+        revenueSold: c.revenueSold,
+        goodConversations: 0,
+        closeRate: 0,
+      }));
 
     // Tech completion stats
     const techStats = await db
@@ -227,7 +263,6 @@ router.get("/weekly", async (req, res) => {
         cashCollected: t.cashCollected,
       }));
 
-    // Reviews received this week
     const [reviewsReceived] = await db
       .select({ count: sql<number>`coalesce(count(*), 0)`.mapWith(Number) })
       .from(reviewWorkflowsTable)

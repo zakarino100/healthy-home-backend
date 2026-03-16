@@ -1,6 +1,7 @@
 export * from "./users";
 export * from "./canvassing";
 export * from "./customers";
+export * from "./lead-details";
 export * from "./jobs";
 export * from "./reviews";
 export * from "./content";

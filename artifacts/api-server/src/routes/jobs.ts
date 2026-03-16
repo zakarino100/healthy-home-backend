@@ -5,8 +5,12 @@ import {
   reviewWorkflowsTable,
   jobContentTable,
   customersTable,
+  leadsTable,
+  leadDetailsTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, sql, isNull } from "drizzle-orm";
+
+const HH_BUSINESS_UNIT = "healthy_home";
 
 const router: IRouter = Router();
 
@@ -62,6 +66,124 @@ router.post("/", async (req, res) => {
     await db.insert(jobContentTable).values({ jobId: job.id }).onConflictDoNothing();
 
     res.status(201).json(job);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /jobs/pending-sales — MUST be defined before /:id to avoid route clash
+router.get("/pending-sales", async (req, res) => {
+  try {
+    const rows = await db
+      .select({
+        leadId: leadsTable.id,
+        homeownerName: leadsTable.homeownerName,
+        addressLine1: leadsTable.addressLine1,
+        city: leadsTable.city,
+        state: leadsTable.state,
+        zip: leadsTable.zip,
+        phone: leadsTable.phone,
+        canvasser: leadsTable.assignedRepEmail,
+        createdAt: leadsTable.createdAt,
+        soldPrice: leadDetailsTable.soldPrice,
+        quotePrice: leadDetailsTable.quotePrice,
+        servicePackage: leadDetailsTable.servicePackage,
+        isBundle: leadDetailsTable.isBundle,
+      })
+      .from(leadsTable)
+      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .where(and(
+        eq(leadsTable.status, "sold"),
+        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+        isNull(leadDetailsTable.jobId),
+      ))
+      .orderBy(leadsTable.createdAt);
+
+    const pendingSales = rows.map(r => {
+      const name = r.homeownerName ?? "";
+      const spaceIdx = name.indexOf(" ");
+      return {
+        leadId: r.leadId,
+        firstName: spaceIdx >= 0 ? name.slice(0, spaceIdx) : name,
+        lastName: spaceIdx >= 0 ? name.slice(spaceIdx + 1) : "",
+        address: r.addressLine1,
+        city: r.city,
+        state: r.state,
+        zip: r.zip,
+        phone: r.phone,
+        canvasser: r.canvasser,
+        soldPrice: r.soldPrice,
+        quotePrice: r.quotePrice,
+        servicePackage: r.servicePackage,
+        isBundle: r.isBundle,
+        createdAt: r.createdAt,
+      };
+    });
+
+    res.json(pendingSales);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /jobs/from-lead/:leadId — MUST be before /:id
+router.post("/from-lead/:leadId", async (req, res) => {
+  try {
+    const leadId = req.params.leadId;
+    const body = req.body;
+
+    const [row] = await db
+      .select({ lead: leadsTable, details: leadDetailsTable })
+      .from(leadsTable)
+      .innerJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
+      .where(and(
+        eq(leadsTable.id, leadId),
+        eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+      ));
+
+    if (!row) return res.status(404).json({ error: "Lead not found or not yet sold" });
+
+    const name = row.lead.homeownerName ?? "";
+    const spaceIdx = name.indexOf(" ");
+    const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name;
+    const lastName = spaceIdx >= 0 ? name.slice(spaceIdx + 1) : "";
+
+    const [customer] = await db.insert(customersTable).values({
+      firstName: firstName || "Unknown",
+      lastName,
+      phone: row.lead.phone ?? null,
+      email: row.lead.email ?? null,
+      address: row.lead.addressLine1 ?? null,
+      city: row.lead.city ?? null,
+      state: row.lead.state ?? null,
+      zip: row.lead.zip ?? null,
+      notes: null,
+      optOut: false,
+      reviewCampaignEligible: false,
+    }).returning();
+
+    const [job] = await db.insert(jobsTable).values({
+      customerId: customer.id,
+      serviceType: row.details.servicePackage ?? "house_wash",
+      soldPrice: row.details.soldPrice ?? null,
+      quotedPrice: row.details.quotePrice ?? null,
+      status: "scheduled",
+      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+      technicianAssigned: body.technicianAssigned ?? null,
+      paymentStatus: "pending",
+      leadId,
+      notes: body.notes ?? null,
+    }).returning();
+
+    await db.insert(jobContentTable).values({ jobId: job.id }).onConflictDoNothing();
+
+    await db.update(leadDetailsTable)
+      .set({ jobId: job.id, updatedAt: new Date() })
+      .where(eq(leadDetailsTable.leadId, leadId));
+
+    res.status(201).json({ customer, job });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

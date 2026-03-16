@@ -3,20 +3,23 @@ import { db } from "@workspace/db";
 import {
   canvassingSessionsTable,
   leadsTable,
+  leadDetailsTable,
   customersTable,
+  jobsTable,
+  jobContentTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-// ---------------------------------------------------------------------------
-// Helpers — map between our external API shape and the shared leads table
-// ---------------------------------------------------------------------------
-
 const HH_BUSINESS_UNIT = "healthy_home";
 
-/** External API → DB row (for inserts/updates) */
-function externalToDb(body: Record<string, any>) {
+// ---------------------------------------------------------------------------
+// Helpers — map between external API shape and the shared leads + lead_details tables
+// ---------------------------------------------------------------------------
+
+/** External API → DB values for leads table */
+function externalToLeadDb(body: Record<string, any>) {
   const nameParts = [body.firstName, body.lastName].filter(Boolean);
   return {
     homeownerName: nameParts.length ? nameParts.join(" ") : (body.homeownerName ?? null),
@@ -42,8 +45,21 @@ function externalToDb(body: Record<string, any>) {
   };
 }
 
-/** DB row → external API shape */
-function dbToExternal(lead: Record<string, any>) {
+/** Extract lead_details fields from incoming body (undefined = not provided) */
+function externalToDetailsDb(body: Record<string, any>) {
+  const hasDetails = body.soldPrice != null || body.quotePrice != null || body.quoteAmount != null || body.servicePackage != null;
+  if (!hasDetails) return null;
+  return {
+    soldPrice: body.soldPrice ?? null,
+    quotePrice: body.quotePrice ?? body.quoteAmount ?? null,
+    servicePackage: body.servicePackage ?? body.serviceInterest ?? null,
+    isBundle: body.isBundle === true || body.isBundle === "true",
+    notes: body.detailsNotes ?? null,
+  };
+}
+
+/** DB row + joined details → external API shape */
+function dbToExternal(lead: Record<string, any>, details?: Record<string, any> | null) {
   const name = lead.homeownerName ?? "";
   const spaceIdx = name.indexOf(" ");
   const firstName = spaceIdx >= 0 ? name.slice(0, spaceIdx) : name;
@@ -69,32 +85,54 @@ function dbToExternal(lead: Record<string, any>) {
       ? new Date(lead.nextFollowupAt).toISOString().split("T")[0]
       : null,
     doNotKnock: lead.doNotKnock,
+    // Financial details from hh_lead_details
+    soldPrice: details?.soldPrice ?? null,
+    quotePrice: details?.quotePrice ?? null,
+    quoteAmount: details?.quotePrice ?? null, // backward compat alias
+    servicePackage: details?.servicePackage ?? null,
+    isBundle: details?.isBundle ?? false,
+    hasJobScheduled: details?.jobId != null,
+    scheduledJobId: details?.jobId ?? null,
     notes: null,
     createdAt: lead.createdAt,
     updatedAt: lead.updatedAt,
   };
 }
 
+/** Upsert hh_lead_details for a given leadId */
+async function upsertLeadDetails(leadId: string, detailsData: Record<string, any> | null) {
+  if (!detailsData) return null;
+  const existing = await db.select().from(leadDetailsTable).where(eq(leadDetailsTable.leadId, leadId));
+  if (existing.length > 0) {
+    const [updated] = await db.update(leadDetailsTable)
+      .set({ ...detailsData, updatedAt: new Date() })
+      .where(eq(leadDetailsTable.leadId, leadId))
+      .returning();
+    return updated;
+  } else {
+    const [created] = await db.insert(leadDetailsTable)
+      .values({ leadId, ...detailsData })
+      .returning();
+    return created;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Canvassing Sessions
 // ---------------------------------------------------------------------------
 
-// GET /canvassing/sessions
 router.get("/sessions", async (req, res) => {
   try {
     const { date, canvasser, neighborhood, startDate, endDate } = req.query as Record<string, string | undefined>;
     const conditions: ReturnType<typeof eq>[] = [];
-
     if (date) conditions.push(eq(canvassingSessionsTable.sessionDate, date));
     if (canvasser) conditions.push(eq(canvassingSessionsTable.canvasser, canvasser));
     if (neighborhood) conditions.push(eq(canvassingSessionsTable.neighborhood, neighborhood));
     if (startDate) conditions.push(gte(canvassingSessionsTable.sessionDate, startDate));
     if (endDate) conditions.push(lte(canvassingSessionsTable.sessionDate, endDate));
-
     const sessions = conditions.length > 0
       ? await db.select().from(canvassingSessionsTable).where(and(...conditions)).orderBy(canvassingSessionsTable.sessionDate)
       : await db.select().from(canvassingSessionsTable).orderBy(canvassingSessionsTable.sessionDate);
-
     res.json(sessions);
   } catch (err) {
     console.error(err);
@@ -102,7 +140,6 @@ router.get("/sessions", async (req, res) => {
   }
 });
 
-// POST /canvassing/sessions
 router.post("/sessions", async (req, res) => {
   try {
     const body = req.body;
@@ -129,7 +166,6 @@ router.post("/sessions", async (req, res) => {
   }
 });
 
-// GET /canvassing/sessions/:id
 router.get("/sessions/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -142,7 +178,6 @@ router.get("/sessions/:id", async (req, res) => {
   }
 });
 
-// PUT /canvassing/sessions/:id
 router.put("/sessions/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -175,7 +210,6 @@ router.put("/sessions/:id", async (req, res) => {
   }
 });
 
-// DELETE /canvassing/sessions/:id
 router.delete("/sessions/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -189,80 +223,91 @@ router.delete("/sessions/:id", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Leads — filtered to business_unit = 'healthy_home'
+// Leads — filtered to business_unit = 'healthy_home', joined with hh_lead_details
 // ---------------------------------------------------------------------------
 
-// GET /canvassing/leads
 router.get("/leads", async (req, res) => {
   try {
     const { status, canvasser, source } = req.query as Record<string, string | undefined>;
     const conditions: ReturnType<typeof eq>[] = [
       eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
     ];
-
     if (status) conditions.push(eq(leadsTable.status, status));
     if (canvasser) conditions.push(eq(leadsTable.assignedRepEmail, canvasser));
     if (source) conditions.push(eq(leadsTable.source, source));
 
-    const leads = await db.select().from(leadsTable)
+    const rows = await db
+      .select({
+        lead: leadsTable,
+        details: leadDetailsTable,
+      })
+      .from(leadsTable)
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(...conditions))
       .orderBy(leadsTable.createdAt);
 
-    res.json(leads.map(dbToExternal));
+    res.json(rows.map(r => dbToExternal(r.lead, r.details)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// POST /canvassing/leads
 router.post("/leads", async (req, res) => {
   try {
-    const values = externalToDb(req.body);
-    const [lead] = await db.insert(leadsTable).values(values).returning();
-    res.status(201).json(dbToExternal(lead));
+    const leadValues = externalToLeadDb(req.body);
+    const detailsData = externalToDetailsDb(req.body);
+
+    const [lead] = await db.insert(leadsTable).values(leadValues).returning();
+    const details = await upsertLeadDetails(lead.id, detailsData);
+
+    res.status(201).json(dbToExternal(lead, details));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// GET /canvassing/leads/:id
 router.get("/leads/:id", async (req, res) => {
   try {
-    const [lead] = await db.select().from(leadsTable)
+    const [row] = await db
+      .select({ lead: leadsTable, details: leadDetailsTable })
+      .from(leadsTable)
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.id, req.params.id),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       ));
-    if (!lead) return res.status(404).json({ error: "Lead not found" });
-    res.json(dbToExternal(lead));
+    if (!row) return res.status(404).json({ error: "Lead not found" });
+    res.json(dbToExternal(row.lead, row.details));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// PUT /canvassing/leads/:id
 router.put("/leads/:id", async (req, res) => {
   try {
-    const values = externalToDb(req.body);
+    const leadValues = externalToLeadDb(req.body);
+    const detailsData = externalToDetailsDb(req.body);
+
     const [lead] = await db.update(leadsTable)
-      .set({ ...values, updatedAt: new Date() })
+      .set({ ...leadValues, updatedAt: new Date() })
       .where(and(
         eq(leadsTable.id, req.params.id),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       ))
       .returning();
     if (!lead) return res.status(404).json({ error: "Lead not found" });
-    res.json(dbToExternal(lead));
+
+    const details = await upsertLeadDetails(lead.id, detailsData);
+    res.json(dbToExternal(lead, details));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// DELETE /canvassing/leads/:id
 router.delete("/leads/:id", async (req, res) => {
   try {
     const deleted = await db.delete(leadsTable)
@@ -279,37 +324,67 @@ router.delete("/leads/:id", async (req, res) => {
   }
 });
 
-// POST /canvassing/leads/:id/convert — convert sold lead to customer
+// POST /canvassing/leads/:id/convert — convert sold lead into customer + scheduled job
 router.post("/leads/:id/convert", async (req, res) => {
   try {
-    const [lead] = await db.select().from(leadsTable)
+    const [row] = await db
+      .select({ lead: leadsTable, details: leadDetailsTable })
+      .from(leadsTable)
+      .leftJoin(leadDetailsTable, eq(leadDetailsTable.leadId, leadsTable.id))
       .where(and(
         eq(leadsTable.id, req.params.id),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       ));
-    if (!lead) return res.status(404).json({ error: "Lead not found" });
+    if (!row) return res.status(404).json({ error: "Lead not found" });
 
-    const ext = dbToExternal(lead);
+    const ext = dbToExternal(row.lead, row.details);
+
+    // Create customer
     const [customer] = await db.insert(customersTable).values({
-      firstName: ext.firstName || (lead.homeownerName ?? "Unknown"),
+      firstName: ext.firstName || (row.lead.homeownerName ?? "Unknown"),
       lastName: ext.lastName || "",
-      phone: lead.phone ?? null,
-      email: lead.email ?? null,
-      address: lead.addressLine1 ?? null,
-      city: lead.city ?? null,
-      state: lead.state ?? null,
-      zip: lead.zip ?? null,
+      phone: row.lead.phone ?? null,
+      email: row.lead.email ?? null,
+      address: row.lead.addressLine1 ?? null,
+      city: row.lead.city ?? null,
+      state: row.lead.state ?? null,
+      zip: row.lead.zip ?? null,
       notes: null,
       optOut: false,
       reviewCampaignEligible: false,
     }).returning();
 
-    // Mark lead as sold
+    // Create job (needs_scheduling)
+    const body = req.body;
+    const [job] = await db.insert(jobsTable).values({
+      customerId: customer.id,
+      serviceType: row.details?.servicePackage ?? ext.serviceInterest ?? "house_wash",
+      soldPrice: row.details?.soldPrice ?? null,
+      quotedPrice: row.details?.quotePrice ?? null,
+      status: body.scheduledAt ? "scheduled" : "needs_scheduling",
+      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
+      technicianAssigned: body.technicianAssigned ?? null,
+      paymentStatus: "pending",
+      leadId: row.lead.id,
+      notes: ext.notes ?? null,
+    }).returning();
+
+    // Auto-create content record
+    await db.insert(jobContentTable).values({ jobId: job.id }).onConflictDoNothing();
+
+    // Link details.jobId back to the new job
+    if (row.details) {
+      await db.update(leadDetailsTable)
+        .set({ jobId: job.id, updatedAt: new Date() })
+        .where(eq(leadDetailsTable.leadId, row.lead.id));
+    }
+
+    // Update lead status to sold (if not already)
     await db.update(leadsTable)
       .set({ status: "sold", updatedAt: new Date() })
       .where(eq(leadsTable.id, req.params.id));
 
-    res.status(201).json(customer);
+    res.status(201).json({ customer, job });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

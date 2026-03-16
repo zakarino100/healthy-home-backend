@@ -4,6 +4,26 @@
 
 A full-stack business operating system for Healthy Home, a local exterior cleaning company (house wash, driveway cleaning, bundles). Tracks canvassing sessions, leads, customers, jobs, review/satisfaction workflows, content capture, team management, and generates automated daily reports in a Robin-compatible payload format.
 
+## Data Architecture — Option 3 (ACTIVE)
+
+**Revenue/closes come from sold leads, not canvassing sessions.**
+
+| Metric | Source |
+|---|---|
+| Doors knocked, conversations, quotes given | `canvassing_sessions` table (activity) |
+| Closes, revenue sold, bundle count | `leads` WHERE `status='sold'` JOIN `hh_lead_details` |
+| Jobs completed, cash collected | `hh_jobs` WHERE `status='completed'` |
+
+Key tables:
+- **`leads`** — shared CRM table; HH records have `business_unit='healthy_home'`
+- **`hh_lead_details`** — stores HH-specific financials (`sold_price`, `quote_price`, `is_bundle`, `job_id`)
+- **`hh_jobs`** — fulfillment records; have `lead_id` FK linking back to the originating sale
+
+### Jobs Pipeline flow
+1. Lead marked `status='sold'` + `hh_lead_details` record created → appears in **Needs Scheduling** section of Jobs page
+2. Owner clicks "Schedule Job" → POST `/api/jobs/from-lead/:leadId` → creates `hh_customers` + `hh_jobs` record, links `lead_details.job_id`
+3. Job moves through pipeline: `scheduled → completed`
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
