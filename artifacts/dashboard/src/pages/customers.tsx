@@ -1,13 +1,46 @@
 import { useState } from "react";
 import { useListCustomers, useCreateCustomer } from "@workspace/api-client-react";
 import { PageLoader, ErrorState, Card, Button, Modal, Input, Label } from "@/components/ui-components";
-import { Plus, User, Phone, MapPin, Mail } from "lucide-react";
+import { Plus, User, Phone, MapPin, Mail, ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import CustomerDrawer, { type CustomerDetail } from "@/components/CustomerDrawer";
+
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { data: customers, isLoading, error } = useListCustomers();
+
+  const openCustomer = async (id: number) => {
+    setSelectedCustomer(null);
+    setDrawerError(null);
+    setDrawerLoading(true);
+    try {
+      const r = await fetch(`${API}/api/customers/${id}`);
+      if (!r.ok) throw new Error("Customer not found");
+      const data = await r.json();
+      setSelectedCustomer(data as CustomerDetail);
+    } catch (err: any) {
+      setDrawerError(err.message ?? "Failed to load customer");
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleCustomerUpdated = (updated: CustomerDetail) => {
+    setSelectedCustomer(updated);
+    queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+  };
+
+  const handleCustomerDeleted = (_id: number) => {
+    setSelectedCustomer(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+  };
 
   if (isLoading && !customers) return <PageLoader />;
   if (error) return <ErrorState error={error} />;
@@ -26,22 +59,29 @@ export default function CustomersPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {customers?.map((customer) => (
-          <Card key={customer.id} className="flex flex-col !p-4 sm:!p-6">
+          <Card
+            key={customer.id}
+            className="flex flex-col !p-4 sm:!p-6 cursor-pointer hover:shadow-md hover:border-primary/30 transition-all group"
+            onClick={() => openCustomer(customer.id)}
+          >
             <div className="flex items-start gap-3 sm:gap-4 mb-3 sm:mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 text-sm font-bold">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 text-sm font-bold">
                 {customer.firstName?.[0]}{customer.lastName?.[0]}
               </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-base sm:text-lg text-slate-900 truncate">{customer.firstName} {customer.lastName}</h3>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-base sm:text-lg text-slate-900 truncate group-hover:text-primary transition-colors">
+                  {customer.firstName} {customer.lastName}
+                </h3>
                 {customer.optOut && <span className="inline-block mt-1 text-xs font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-md">Opted Out</span>}
               </div>
+              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-primary transition-colors shrink-0 mt-1" />
             </div>
 
             <div className="space-y-2 text-sm text-slate-600">
               {customer.phone && (
                 <div className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <a href={`tel:${customer.phone}`} className="hover:text-primary transition-colors">{customer.phone}</a>
+                  <span>{customer.phone}</span>
                 </div>
               )}
               {customer.email && (
@@ -71,6 +111,16 @@ export default function CustomersPage() {
       </div>
 
       <CreateCustomerModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      <CustomerDrawer
+        open={!!selectedCustomer || drawerLoading}
+        customer={selectedCustomer}
+        loading={drawerLoading}
+        error={drawerError}
+        onClose={() => { setSelectedCustomer(null); setDrawerError(null); }}
+        onCustomerUpdated={handleCustomerUpdated}
+        onCustomerDeleted={handleCustomerDeleted}
+      />
     </div>
   );
 }
