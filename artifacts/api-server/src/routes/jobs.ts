@@ -9,7 +9,9 @@ import {
   leadDetailsTable,
   leadMetaTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, sql, isNull, or } from "drizzle-orm";
+import { eq, and, gte, lte, sql, isNull, or, ne } from "drizzle-orm";
+
+const WOLF_PACK_SOURCE = "Wolf Pack Wash leads historical import";
 
 const HH_BUSINESS_UNIT = "Healthy Home";
 
@@ -142,18 +144,24 @@ router.get("/pending-sales", async (req, res) => {
       .where(and(
         eq(leadsTable.status, "sold"),
         eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
+        // Exclude historical Wolf Pack imports — they should never appear in the jobs pipeline
+        ne(leadsTable.source, WOLF_PACK_SOURCE),
         isNull(leadDetailsTable.jobId),
         or(isNull(leadMetaTable.leadId), eq(leadMetaTable.isDeleted, false))!,
       ))
       .orderBy(leadsTable.createdAt);
 
-    const pendingSales = rows.map(r => {
+    // Deduplicate by leadId (the LEFT JOIN to lead_meta can produce multiple rows per lead)
+    const seen = new Set<string>();
+    const pendingSales = rows.flatMap(r => {
+      if (seen.has(r.leadId)) return [];
+      seen.add(r.leadId);
       const name = r.homeownerName ?? "";
       const spaceIdx = name.indexOf(" ");
       const servicePackage = r.servicePackage
         ?? (Array.isArray(r.servicesInterested) ? r.servicesInterested[0] : null)
         ?? null;
-      return {
+      return [{
         leadId: r.leadId,
         firstName: spaceIdx >= 0 ? name.slice(0, spaceIdx) : name,
         lastName: spaceIdx >= 0 ? name.slice(spaceIdx + 1) : "",
@@ -171,7 +179,7 @@ router.get("/pending-sales", async (req, res) => {
         latestTouchNote: r.latestTouchNote ?? null,
         latestTouchDate: r.latestTouchDate ?? null,
         createdAt: r.createdAt,
-      };
+      }];
     });
 
     res.json(pendingSales);

@@ -86,6 +86,27 @@ export const leadsTable = pgTable("leads", {
   createdBy: text("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  // ---------------------------------------------------------------------------
+  // Wolf Pack Wash historical import fields (read-only from HH perspective)
+  // ---------------------------------------------------------------------------
+  isHistoricalImport: boolean("is_historical_import").default(false),
+  importBatch: text("import_batch"),
+  leadYear: integer("lead_year"),
+  leadSourceOriginal: text("lead_source_original"),
+  // Service completion tracking
+  isServiced: boolean("is_serviced").default(false),
+  servicedOn: date("serviced_on"),
+  soldDate: date("sold_date"),
+  scheduledDate: date("scheduled_date"),
+  isPurchased: boolean("is_purchased").default(false),
+  totalQuote: numeric("total_quote", { precision: 10, scale: 2 }),
+  frequency: text("frequency"),
+  // Property info
+  houseSqft: integer("house_sqft"),
+  cementSqft: integer("cement_sqft"),
+  // Notes from original system
+  serviceNotes: text("service_notes"),
+  conversationNotes: text("conversation_notes"),
 });
 
 export const insertLeadSchema = createInsertSchema(leadsTable).omit({

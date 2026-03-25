@@ -5,13 +5,15 @@ import {
 } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PageLoader, ErrorState, Card, Badge, Button, Modal, Input, Select, Label } from "@/components/ui-components";
-import { MapPin, Phone, User, TrendingUp, Filter, Plus } from "lucide-react";
+import { MapPin, Phone, User, TrendingUp, Filter, Plus, Archive } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateLead } from "@workspace/api-client-react";
 import LeadDrawer, { type LeadDetail } from "@/components/LeadDrawer";
 
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const WOLF_PACK_SOURCE = "Wolf Pack Wash leads historical import";
 
 type Source = "d2d" | "referral" | "ad" | "other";
 type Status = "new" | "quoted" | "follow_up" | "sold" | "lost" | "no_answer" | "not_home" | "not_interested" | "contacted" | "completed";
@@ -111,7 +113,7 @@ export default function LeadsPage() {
   const { data: leads, isLoading: leadsLoading, error: leadsError } = useListLeads(
     (sourceFilter !== "all" || statusFilter !== "all")
       ? {
-          ...(sourceFilter !== "all" ? { source: sourceFilter as any } : {}),
+          ...(sourceFilter === "historical" ? { source: WOLF_PACK_SOURCE as any } : sourceFilter !== "all" ? { source: sourceFilter as any } : {}),
           ...(statusFilter !== "all" ? { status: statusFilter as any } : {}),
         }
       : undefined
@@ -122,10 +124,16 @@ export default function LeadsPage() {
 
   // --- Source breakdown stats ---
   const sourceStats = useMemo(() => {
-    const counts: Record<string, number> = { d2d: 0, referral: 0, ad: 0, other: 0 };
+    const counts: Record<string, number> = { d2d: 0, referral: 0, ad: 0, other: 0, historical: 0 };
     (allLeads ?? []).forEach((l) => {
       const s = l.source ?? "other";
-      counts[s] = (counts[s] ?? 0) + 1;
+      if (s === WOLF_PACK_SOURCE) {
+        counts.historical = (counts.historical ?? 0) + 1;
+      } else if (["d2d", "referral", "ad"].includes(s)) {
+        counts[s] = (counts[s] ?? 0) + 1;
+      } else {
+        counts.other = (counts.other ?? 0) + 1;
+      }
     });
     return counts;
   }, [allLeads]);
@@ -178,7 +186,7 @@ export default function LeadsPage() {
       </div>
 
       {/* Source Breakdown */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 md:gap-4">
         {(["d2d", "referral", "ad", "other"] as Source[]).map((src) => (
           <button
             key={src}
@@ -194,6 +202,22 @@ export default function LeadsPage() {
             <p className="text-xs text-slate-400 mt-1">leads</p>
           </button>
         ))}
+        {/* Wolf Pack historical imports */}
+        <button
+          onClick={() => setSourceFilter(sourceFilter === "historical" ? "all" : "historical")}
+          className={`text-left rounded-2xl p-4 sm:p-5 border-2 transition-all hover-lift ${
+            sourceFilter === "historical"
+              ? "border-amber-500 bg-amber-50 shadow-md"
+              : "border-amber-200/60 bg-white shadow-sm hover:border-amber-300"
+          }`}
+        >
+          <div className="flex items-center gap-1 mb-2">
+            <Archive className="w-3 h-3 text-amber-600" />
+            <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Historical</p>
+          </div>
+          <p className="text-2xl md:text-3xl font-display font-extrabold text-slate-900">{sourceStats.historical ?? 0}</p>
+          <p className="text-xs text-amber-500 mt-1">Wolf Pack Wash</p>
+        </button>
       </div>
 
       {/* Neighborhood Heat Map */}
@@ -269,17 +293,21 @@ export default function LeadsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Filter className="w-4 h-4 text-slate-400" />
           <div className="flex flex-wrap gap-2">
-            {["all", "d2d", "referral", "ad", "other"].map((s) => (
+            {["all", "d2d", "referral", "ad", "other", "historical"].map((s) => (
               <button
                 key={s}
                 onClick={() => setSourceFilter(s)}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
                   sourceFilter === s
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                    ? s === "historical"
+                      ? "bg-amber-500 text-white border-amber-500"
+                      : "bg-primary text-white border-primary"
+                    : s === "historical"
+                      ? "bg-white text-amber-600 border-amber-200 hover:border-amber-400"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
                 }`}
               >
-                {s === "all" ? "All Sources" : SOURCE_LABELS[s as Source]}
+                {s === "all" ? "All Sources" : s === "historical" ? "Historical (Wolf Pack)" : SOURCE_LABELS[s as Source]}
               </button>
             ))}
           </div>
@@ -319,9 +347,15 @@ export default function LeadsPage() {
                       <h3 className="font-bold text-slate-900 text-sm sm:text-base">
                         {lead.firstName} {lead.lastName}
                       </h3>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${SOURCE_COLORS[lead.source as Source ?? "other"]}`}>
-                        {SOURCE_LABELS[lead.source as Source ?? "other"]}
-                      </span>
+                      {lead.source === WOLF_PACK_SOURCE ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border bg-amber-100 text-amber-700 border-amber-200">
+                          <Archive className="w-3 h-3" /> Historical
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${SOURCE_COLORS[lead.source as Source ?? "other"]}`}>
+                          {SOURCE_LABELS[lead.source as Source ?? "other"]}
+                        </span>
+                      )}
                       <Badge variant={STATUS_VARIANT[lead.status ?? "new"] ?? "neutral"}>
                         {STATUS_LABELS[lead.status ?? "new"] ?? (lead.status ?? "new").replace(/_/g, " ")}
                       </Badge>

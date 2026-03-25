@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, Phone, Mail, MapPin, User, Calendar, DollarSign, Tag, Clock } from "lucide-react";
+import { X, Phone, Mail, MapPin, User, Calendar, DollarSign, Tag, Clock, Archive, CheckCircle, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui-components";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -33,6 +33,22 @@ export interface LeadDetail {
   changeLog: ChangeEntry[];
   linkedCustomer: Record<string, any> | null;
   linkedJobs: Record<string, any>[];
+  // Historical import fields (Wolf Pack Wash)
+  isHistoricalImport?: boolean;
+  importBatch?: string | null;
+  leadYear?: number | null;
+  leadSourceOriginal?: string | null;
+  isServiced?: boolean;
+  servicedOn?: string | null;
+  soldDate?: string | null;
+  scheduledDate?: string | null;
+  isPurchased?: boolean;
+  totalQuote?: string | null;
+  frequency?: string | null;
+  houseSqft?: number | null;
+  cementSqft?: number | null;
+  serviceNotes?: string | null;
+  conversationNotes?: string | null;
 }
 
 interface ChangeEntry {
@@ -473,11 +489,18 @@ export default function LeadDrawer({
             <h2 className="font-bold text-slate-900 text-base truncate">
               {loading && !lead ? "Loading..." : fullName}
             </h2>
-            {lead && (
-              <Badge variant={STATUS_VARIANT[lead.status] ?? "neutral"} className="mt-1">
-                {STATUS_LABELS[lead.status] ?? lead.status}
-              </Badge>
-            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {lead && (
+                <Badge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>
+                  {STATUS_LABELS[lead.status] ?? lead.status}
+                </Badge>
+              )}
+              {lead?.isHistoricalImport && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest bg-amber-100 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                  <Archive className="w-3 h-3" /> Historical
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -587,6 +610,106 @@ export default function LeadDrawer({
                   <p className="text-sm text-slate-700 bg-slate-50 rounded-xl px-4 py-3 leading-relaxed">
                     {lead.notes}
                   </p>
+                </section>
+              )}
+
+              {/* Historical Import Record (Wolf Pack Wash) */}
+              {lead.isHistoricalImport && (
+                <section className="border border-amber-200 rounded-2xl bg-amber-50/60 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Archive className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-xs font-bold text-amber-700 uppercase tracking-widest">
+                      Wolf Pack Wash — Historical Record
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-amber-100 text-sm">
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 font-medium">Serviced</span>
+                      {lead.isServiced ? (
+                        <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+                          <CheckCircle className="w-4 h-4" /> Yes
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <XCircle className="w-4 h-4" /> No
+                        </span>
+                      )}
+                    </div>
+                    {lead.servicedOn && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Serviced On</span>
+                        <span className="text-slate-800">{formatDate(lead.servicedOn)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 font-medium">Purchased</span>
+                      {lead.isPurchased ? (
+                        <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+                          <CheckCircle className="w-4 h-4" /> Yes
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">No</span>
+                      )}
+                    </div>
+                    {lead.totalQuote && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Total Quote</span>
+                        <span className="text-slate-800 font-semibold">{formatCurrency(parseFloat(lead.totalQuote))}</span>
+                      </div>
+                    )}
+                    {lead.soldDate && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Sold Date</span>
+                        <span className="text-slate-800">{formatDate(lead.soldDate)}</span>
+                      </div>
+                    )}
+                    {lead.scheduledDate && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Scheduled Date</span>
+                        <span className="text-slate-800">{formatDate(lead.scheduledDate)}</span>
+                      </div>
+                    )}
+                    {lead.frequency && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Frequency</span>
+                        <span className="text-slate-800 capitalize">{lead.frequency}</span>
+                      </div>
+                    )}
+                    {lead.leadYear && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Year</span>
+                        <span className="text-slate-800">{lead.leadYear}</span>
+                      </div>
+                    )}
+                    {(lead.houseSqft || lead.cementSqft) && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Property Size</span>
+                        <span className="text-slate-800 text-xs text-right">
+                          {lead.houseSqft ? `${lead.houseSqft.toLocaleString()} sqft house` : ""}
+                          {lead.houseSqft && lead.cementSqft ? " · " : ""}
+                          {lead.cementSqft ? `${lead.cementSqft.toLocaleString()} sqft cement` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {lead.leadSourceOriginal && (
+                      <div className="flex items-center justify-between py-2">
+                        <span className="text-slate-500 font-medium">Original Source</span>
+                        <span className="text-slate-800">{lead.leadSourceOriginal}</span>
+                      </div>
+                    )}
+                  </div>
+                  {lead.serviceNotes && (
+                    <div className="mt-3 pt-3 border-t border-amber-100">
+                      <p className="text-xs font-semibold text-slate-500 mb-1">Service Notes</p>
+                      <p className="text-sm text-slate-700 leading-relaxed">{lead.serviceNotes}</p>
+                    </div>
+                  )}
+                  {lead.conversationNotes && (
+                    <div className="mt-3 pt-3 border-t border-amber-100">
+                      <p className="text-xs font-semibold text-slate-500 mb-1">Conversation Notes</p>
+                      <p className="text-sm text-slate-700 leading-relaxed">{lead.conversationNotes}</p>
+                    </div>
+                  )}
                 </section>
               )}
 

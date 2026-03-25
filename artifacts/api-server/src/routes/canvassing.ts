@@ -10,7 +10,7 @@ import {
   jobsTable,
   jobContentTable,
 } from "@workspace/db/schema";
-import { eq, and, gte, lte, or, isNull, sql } from "drizzle-orm";
+import { eq, and, gte, lte, or, isNull, sql, ne } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -58,6 +58,13 @@ function externalToDetailsDb(body: Record<string, any>) {
     isBundle: body.isBundle === true || body.isBundle === "true",
     notes: body.detailsNotes ?? null,
   };
+}
+
+const WOLF_PACK_SOURCE = "Wolf Pack Wash leads historical import";
+
+/** Returns true if this lead is a historical Wolf Pack import (should not enter jobs pipeline) */
+function isWolfPackLead(lead: Record<string, any>): boolean {
+  return lead.source === WOLF_PACK_SOURCE || lead.isHistoricalImport === true;
 }
 
 /** DB row + joined details (+ optional meta) → external API shape */
@@ -108,6 +115,22 @@ function dbToExternal(
     deletedBy: meta?.deletedBy ?? null,
     updatedBy: meta?.updatedBy ?? null,
     changeLog: (meta?.changeLog as any[]) ?? [],
+    // Historical import fields (Wolf Pack Wash)
+    isHistoricalImport: lead.isHistoricalImport ?? false,
+    importBatch: lead.importBatch ?? null,
+    leadYear: lead.leadYear ?? null,
+    leadSourceOriginal: lead.leadSourceOriginal ?? null,
+    isServiced: lead.isServiced ?? false,
+    servicedOn: lead.servicedOn ?? null,
+    soldDate: lead.soldDate ?? null,
+    scheduledDate: lead.scheduledDate ?? null,
+    isPurchased: lead.isPurchased ?? false,
+    totalQuote: lead.totalQuote ?? null,
+    frequency: lead.frequency ?? null,
+    houseSqft: lead.houseSqft ?? null,
+    cementSqft: lead.cementSqft ?? null,
+    serviceNotes: lead.serviceNotes ?? null,
+    conversationNotes: lead.conversationNotes ?? null,
   };
 }
 
@@ -158,6 +181,12 @@ async function autoConvertSoldLead(
   lead: Record<string, any>,
   details: Record<string, any> | null,
 ) {
+  // Skip historical imports — Wolf Pack leads should never enter the jobs pipeline
+  if (isWolfPackLead(lead)) {
+    console.log(`[autoConvert] skipping historical import lead ${leadId}`);
+    return;
+  }
+
   // Skip if any job already linked to this lead
   const existing = await db
     .select({ id: jobsTable.id })
@@ -331,7 +360,7 @@ router.delete("/sessions/:id", async (req, res) => {
 
 router.get("/leads", async (req, res) => {
   try {
-    const { status, canvasser, source } = req.query as Record<string, string | undefined>;
+    const { status, canvasser, source, historical } = req.query as Record<string, string | undefined>;
     const conditions: ReturnType<typeof eq>[] = [
       eq(leadsTable.businessUnit, HH_BUSINESS_UNIT),
       // Exclude soft-deleted leads (meta row absent = not deleted; present with is_deleted=true = excluded)
@@ -339,7 +368,16 @@ router.get("/leads", async (req, res) => {
     ];
     if (status) conditions.push(eq(leadsTable.status, status));
     if (canvasser) conditions.push(eq(leadsTable.assignedRepEmail, canvasser));
-    if (source) conditions.push(eq(leadsTable.source, source));
+    if (historical === "true") {
+      // Return only historical Wolf Pack imports
+      conditions.push(eq(leadsTable.source, WOLF_PACK_SOURCE));
+    } else if (historical === "false") {
+      // Return only active HH leads, not historical imports
+      conditions.push(ne(leadsTable.source, WOLF_PACK_SOURCE));
+    } else if (source) {
+      // Legacy exact-match source filter
+      conditions.push(eq(leadsTable.source, source));
+    }
 
     const rows = await db
       .select({
