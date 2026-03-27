@@ -1,0 +1,53 @@
+We need to connect an external embedded lead form from the Wolf Pack Wash website into the Healthy Home backend so that all new website submissions flow into the Healthy Home CRM instead of the old Wolf Pack Wash CRM.
+
+Your job is to:
+
+inspect the Healthy Home backend project and determine the correct ingestion path for a website lead submission
+identify exactly what the external form must send:
+endpoint URL / route
+method
+auth requirements, if any
+required headers
+required and optional fields
+exact JSON payload shape or form-data shape
+validation requirements
+expected response format
+confirm how these submissions should be stored in the Healthy Home backend:
+what model/table/collection they land in
+how they appear in the CRM
+how source attribution should be labeled (for example: wolf_pack_wash_website)
+identify any field mapping needed from a typical website form, such as:
+first name
+last name
+full name
+phone
+email
+address
+service interest
+message / notes
+preferred contact method
+source / campaign / utm fields
+flag anything missing on the Healthy Home backend side that should be created before the external form is wired up
+then produce a copy-paste implementation prompt for the separate Replit agent that owns the Wolf Pack Wash embedded form project
+Important requirements:
+
+We want the Healthy Home backend to be the destination/source of truth
+We do not want submissions going to the old Wolf Pack Wash CRM anymore
+Please preserve or improve attribution so we still know the lead came from the Wolf Pack Wash website
+If there is no safe public endpoint yet, propose the cleanest minimal change needed on the Healthy Home backend first
+If auth is required, explain the safest practical way for the embedded form project to authenticate
+Be precise and implementation-ready, not high-level
+Output format:
+
+Summary of the correct integration path
+Technical spec for the external form
+Anything that must be changed in the Healthy Home backend first
+A final copy-paste prompt for the Wolf Pack Wash embedded form Replit agent
+The final prompt for the Wolf Pack Wash embedded form agent should include:
+
+exactly what file(s) to inspect/change
+exactly where the submission is currently going
+exactly what to replace it with
+exact payload mapping
+how to test success
+how to confirm the submission now appears in the Healthy Home backend CRM

@@ -11,6 +11,7 @@ import reportsRouter from "./reports";
 import calendarRouter from "./calendar";
 import tasksRouter from "./tasks";
 import phoneRouter from "./phone";
+import formRouter from "./form";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use("/reports", reportsRouter);
 router.use("/calendar", calendarRouter);
 router.use("/tasks", tasksRouter);
 router.use("/phone", phoneRouter);
+router.use("/form", formRouter);
 
 export default router;
