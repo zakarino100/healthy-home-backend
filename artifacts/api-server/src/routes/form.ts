@@ -110,7 +110,7 @@ router.post("/submit", requireFormToken, async (req, res) => {
       homeownerName,
       phone,
       email,
-      addressLine1: address,
+      addressLine1: address ?? "",   // column is NOT NULL; empty string when form omits address
       city,
       state,
       zip,
