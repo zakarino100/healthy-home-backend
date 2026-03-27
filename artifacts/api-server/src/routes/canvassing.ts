@@ -20,43 +20,62 @@ const HH_BUSINESS_UNIT = "Healthy Home";
 // Helpers — map between external API shape and the shared leads + lead_details tables
 // ---------------------------------------------------------------------------
 
-/** External API → DB values for leads table */
+/** External API → DB values for leads table.
+ *  Accepts both camelCase (dashboard) and snake_case (D2D canvassing app) field names. */
 function externalToLeadDb(body: Record<string, any>) {
   const nameParts = [body.firstName, body.lastName].filter(Boolean);
+
+  // D2D app sends services_interested as array; dashboard sends serviceInterest as string
+  const servicesInterested =
+    body.services_interested ??
+    (body.serviceInterest ? [body.serviceInterest] : null) ??
+    body.servicesInterested ??
+    null;
+
+  // D2D app sends follow_up_date; dashboard sends followUpDate
+  const followUpRaw = body.follow_up_date ?? body.followUpDate ?? body.nextFollowupAt ?? null;
+
   return {
-    homeownerName: nameParts.length ? nameParts.join(" ") : (body.homeownerName ?? null),
+    homeownerName: nameParts.length ? nameParts.join(" ") : (body.homeowner_name ?? body.homeownerName ?? null),
     phone: body.phone ?? null,
     email: body.email ?? null,
-    addressLine1: body.address ?? body.addressLine1 ?? "",
+    addressLine1: body.address ?? body.address_line1 ?? body.addressLine1 ?? "",
     city: body.city ?? null,
     state: body.state ?? null,
     zip: body.zip ?? null,
     source: body.source ?? "crm",
     businessUnit: HH_BUSINESS_UNIT,
-    servicesInterested: body.serviceInterest
-      ? [body.serviceInterest]
-      : body.servicesInterested ?? null,
+    servicesInterested,
     status: body.status ?? "new",
-    assignedRepEmail: body.canvasser ?? body.assignedRepEmail ?? null,
-    nextFollowupAt: body.followUpDate
-      ? new Date(body.followUpDate)
-      : body.nextFollowupAt
-        ? new Date(body.nextFollowupAt)
-        : null,
+    // D2D sends rep_email; dashboard sends canvasser or assignedRepEmail
+    assignedRepEmail: body.rep_email ?? body.canvasser ?? body.assignedRepEmail ?? null,
+    nextFollowupAt: followUpRaw ? new Date(followUpRaw) : null,
+    followupChannel: body.follow_up_channel ?? body.followupChannel ?? null,
+    lostReason: body.lost_reason ?? body.lostReason ?? null,
+    // Dedup key from D2D canvassing app
+    canvassingLeadId: body.canvassing_lead_id ?? body.canvassingLeadId ?? null,
     createdBy: body.createdBy ?? null,
   };
 }
 
-/** Extract lead_details fields from incoming body (undefined = not provided) */
+/** Extract lead_details fields from incoming body (undefined = not provided).
+ *  Accepts both camelCase (dashboard) and snake_case (D2D canvassing app) field names. */
 function externalToDetailsDb(body: Record<string, any>) {
-  const hasDetails = body.soldPrice != null || body.quotePrice != null || body.quoteAmount != null || body.servicePackage != null;
+  const quotePrice = body.quotePrice ?? body.quoteAmount ?? body.quote_amount ?? null;
+  const quoteLineItems = body.quote_line_items ?? body.quoteLineItems ?? null;
+  const hasDetails =
+    body.soldPrice != null ||
+    quotePrice != null ||
+    body.servicePackage != null ||
+    quoteLineItems != null;
   if (!hasDetails) return null;
   return {
     soldPrice: body.soldPrice ?? null,
-    quotePrice: body.quotePrice ?? body.quoteAmount ?? null,
+    quotePrice,
     servicePackage: body.servicePackage ?? body.serviceInterest ?? null,
     isBundle: body.isBundle === true || body.isBundle === "true",
     notes: body.detailsNotes ?? null,
+    quoteLineItems: quoteLineItems ? JSON.stringify(quoteLineItems) : null,
   };
 }
 
@@ -98,6 +117,9 @@ function dbToExternal(
       ? new Date(lead.nextFollowupAt).toISOString().split("T")[0]
       : null,
     doNotKnock: lead.doNotKnock,
+    followUpChannel: lead.followupChannel ?? null,
+    lostReason: lead.lostReason ?? null,
+    canvassingLeadId: lead.canvassingLeadId ?? null,
     // Financial details from hh_lead_details
     soldPrice: details?.soldPrice ?? null,
     quotePrice: details?.quotePrice ?? null,
@@ -107,6 +129,7 @@ function dbToExternal(
     hasJobScheduled: details?.jobId != null,
     scheduledJobId: details?.jobId ?? null,
     notes: details?.notes ?? null,
+    quoteLineItems: details?.quoteLineItems ?? null,
     createdAt: lead.createdAt,
     updatedAt: lead.updatedAt,
     // Audit / soft-delete from hh_lead_meta
@@ -262,28 +285,35 @@ router.get("/sessions", async (req, res) => {
 
 router.post("/sessions", async (req, res) => {
   try {
-    const body = req.body;
+    const b = req.body;
+    // Accept both camelCase (dashboard) and snake_case / D2D field names
+    const canvasser = b.rep_email ?? b.canvasser;
+    const sessionDate = b.date ?? b.sessionDate;
+    if (!canvasser || !sessionDate) {
+      return res.status(400).json({ error: "canvasser (or rep_email) and sessionDate (or date) are required" });
+    }
     const [session] = await db.insert(canvassingSessionsTable).values({
-      canvasser: body.canvasser,
-      sessionDate: body.sessionDate,
-      neighborhood: body.neighborhood ?? null,
-      route: body.route ?? null,
-      doorsKnocked: body.doorsKnocked ?? 0,
-      peopleReached: body.peopleReached ?? 0,
-      goodConversations: body.goodConversations ?? 0,
-      quotesGiven: body.quotesGiven ?? 0,
-      closes: body.closes ?? 0,
-      revenueSold: body.revenueSold ?? "0",
-      averageTicket: body.averageTicket ?? null,
-      bundleCount: body.bundleCount ?? 0,
-      driveawayAddOnCount: body.driveawayAddOnCount ?? 0,
-      notes: body.notes ?? null,
-      notHome: body.notHome ?? 0,
-      noAnswer: body.noAnswer ?? 0,
-      callbacksRequested: body.callbacksRequested ?? 0,
-      syncSource: body.syncSource ?? "dashboard",
-      updatedBy: body.updatedBy ?? null,
-      routeId: body.routeId ?? null,
+      canvasser,
+      canvasserName: b.rep_name ?? b.canvasserName ?? null,
+      sessionDate,
+      neighborhood: b.neighborhood ?? null,
+      route: b.route ?? null,
+      doorsKnocked: b.doors_knocked ?? b.doorsKnocked ?? 0,
+      peopleReached: b.leads_created ?? b.peopleReached ?? 0,
+      goodConversations: b.goodConversations ?? 0,
+      quotesGiven: b.quotesGiven ?? 0,
+      closes: b.closes ?? 0,
+      revenueSold: b.revenue ?? b.revenueSold ?? "0",
+      averageTicket: b.averageTicket ?? null,
+      bundleCount: b.bundleCount ?? 0,
+      driveawayAddOnCount: b.driveawayAddOnCount ?? 0,
+      notes: b.notes ?? null,
+      notHome: b.notHome ?? 0,
+      noAnswer: b.noAnswer ?? 0,
+      callbacksRequested: b.callbacksRequested ?? 0,
+      syncSource: b.syncSource ?? "d2d",
+      updatedBy: b.updatedBy ?? null,
+      routeId: b.routeId ?? null,
     }).returning();
     res.status(201).json(session);
   } catch (err) {
@@ -307,31 +337,33 @@ router.get("/sessions/:id", async (req, res) => {
 router.put("/sessions/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const body = req.body;
+    const b = req.body;
+    const setValues: Record<string, any> = {
+      canvasser: b.rep_email ?? b.canvasser,
+      canvasserName: b.rep_name ?? b.canvasserName ?? null,
+      sessionDate: b.date ?? b.sessionDate,
+      neighborhood: b.neighborhood ?? null,
+      route: b.route ?? null,
+      doorsKnocked: b.doors_knocked ?? b.doorsKnocked ?? 0,
+      peopleReached: b.leads_created ?? b.peopleReached ?? 0,
+      goodConversations: b.goodConversations ?? 0,
+      quotesGiven: b.quotesGiven ?? 0,
+      closes: b.closes ?? 0,
+      revenueSold: b.revenue ?? b.revenueSold ?? "0",
+      averageTicket: b.averageTicket ?? null,
+      bundleCount: b.bundleCount ?? 0,
+      driveawayAddOnCount: b.driveawayAddOnCount ?? 0,
+      notes: b.notes ?? null,
+      notHome: b.notHome ?? 0,
+      noAnswer: b.noAnswer ?? 0,
+      callbacksRequested: b.callbacksRequested ?? 0,
+      updatedBy: b.updatedBy ?? null,
+      updatedAt: new Date(),
+    };
+    if (b.syncSource !== undefined) setValues.syncSource = b.syncSource;
+    if (b.routeId !== undefined) setValues.routeId = b.routeId;
     const [session] = await db.update(canvassingSessionsTable)
-      .set({
-        canvasser: body.canvasser,
-        sessionDate: body.sessionDate,
-        neighborhood: body.neighborhood ?? null,
-        route: body.route ?? null,
-        doorsKnocked: body.doorsKnocked ?? 0,
-        peopleReached: body.peopleReached ?? 0,
-        goodConversations: body.goodConversations ?? 0,
-        quotesGiven: body.quotesGiven ?? 0,
-        closes: body.closes ?? 0,
-        revenueSold: body.revenueSold ?? "0",
-        averageTicket: body.averageTicket ?? null,
-        bundleCount: body.bundleCount ?? 0,
-        driveawayAddOnCount: body.driveawayAddOnCount ?? 0,
-        notes: body.notes ?? null,
-        notHome: body.notHome ?? 0,
-        noAnswer: body.noAnswer ?? 0,
-        callbacksRequested: body.callbacksRequested ?? 0,
-        syncSource: body.syncSource ?? undefined,
-        updatedBy: body.updatedBy ?? null,
-        routeId: body.routeId ?? undefined,
-        updatedAt: new Date(),
-      })
+      .set(setValues)
       .where(eq(canvassingSessionsTable.id, id))
       .returning();
     if (!session) return res.status(404).json({ error: "Session not found" });
@@ -403,6 +435,25 @@ router.post("/leads", async (req, res) => {
     const leadValues = externalToLeadDb(req.body);
     const detailsData = externalToDetailsDb(req.body);
 
+    // Dedup: if canvassing_lead_id provided, upsert instead of insert
+    if (leadValues.canvassingLeadId) {
+      const [existing] = await db
+        .select({ id: leadsTable.id })
+        .from(leadsTable)
+        .where(eq(leadsTable.canvassingLeadId, leadValues.canvassingLeadId));
+
+      if (existing) {
+        // Update existing lead
+        const [updatedLead] = await db
+          .update(leadsTable)
+          .set({ ...leadValues, updatedAt: new Date() })
+          .where(eq(leadsTable.id, existing.id))
+          .returning();
+        const updatedDetails = await upsertLeadDetails(existing.id, detailsData);
+        return res.status(200).json(dbToExternal(updatedLead, updatedDetails));
+      }
+    }
+
     const [lead] = await db.insert(leadsTable).values(leadValues).returning();
     const details = await upsertLeadDetails(lead.id, detailsData);
 
@@ -473,8 +524,13 @@ router.put("/leads/:id", async (req, res) => {
     const EDITABLE_FIELDS = [
       "firstName", "lastName", "phone", "email",
       "address", "city", "state", "zip",
-      "serviceInterest", "quoteAmount", "status",
-      "followUpDate", "notes",
+      "serviceInterest", "servicesInterested", "services_interested",
+      "quoteAmount", "quotePrice", "quote_amount",
+      "quoteLineItems", "quote_line_items",
+      "status", "followUpDate", "follow_up_date",
+      "followUpChannel", "follow_up_channel",
+      "lostReason", "lost_reason",
+      "notes",
     ];
     const incoming: Record<string, any> = {};
     for (const field of EDITABLE_FIELDS) {
@@ -513,10 +569,43 @@ router.put("/leads/:id", async (req, res) => {
     if ("city" in incoming) leadUpdate.city = incoming.city;
     if ("state" in incoming) leadUpdate.state = incoming.state;
     if ("zip" in incoming) leadUpdate.zip = incoming.zip;
-    if ("serviceInterest" in incoming) leadUpdate.servicesInterested = incoming.serviceInterest ? [incoming.serviceInterest] : null;
+
+    // Services — accept both forms
+    const svcKey = ["servicesInterested", "services_interested"].find(k => k in incoming);
+    if ("serviceInterest" in incoming) {
+      leadUpdate.servicesInterested = incoming.serviceInterest ? [incoming.serviceInterest] : null;
+    } else if (svcKey) {
+      const v = incoming[svcKey];
+      leadUpdate.servicesInterested = Array.isArray(v) ? v : (v ? [v] : null);
+    }
+
     if ("status" in incoming) leadUpdate.status = incoming.status;
-    if ("followUpDate" in incoming) leadUpdate.nextFollowupAt = incoming.followUpDate ? new Date(incoming.followUpDate) : null;
-    if ("quoteAmount" in incoming) detailsUpdate.quotePrice = incoming.quoteAmount;
+
+    // Follow-up date — accept both forms
+    const fudKey = ["followUpDate", "follow_up_date"].find(k => k in incoming);
+    if (fudKey) {
+      const v = incoming[fudKey];
+      leadUpdate.nextFollowupAt = v ? new Date(v) : null;
+    }
+
+    // Follow-up channel
+    const fucKey = ["followUpChannel", "follow_up_channel"].find(k => k in incoming);
+    if (fucKey) leadUpdate.followupChannel = incoming[fucKey];
+
+    // Lost reason
+    const lrKey = ["lostReason", "lost_reason"].find(k => k in incoming);
+    if (lrKey) leadUpdate.lostReason = incoming[lrKey];
+
+    // Financial details
+    const qaKey = ["quoteAmount", "quotePrice", "quote_amount"].find(k => k in incoming);
+    if (qaKey) detailsUpdate.quotePrice = incoming[qaKey];
+
+    const qliKey = ["quoteLineItems", "quote_line_items"].find(k => k in incoming);
+    if (qliKey) {
+      const v = incoming[qliKey];
+      detailsUpdate.quoteLineItems = v ? JSON.stringify(v) : null;
+    }
+
     if ("notes" in incoming) detailsUpdate.notes = incoming.notes;
 
     // 6. Persist lead table changes

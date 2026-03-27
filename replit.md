@@ -81,14 +81,35 @@ All core HH tables (`hh_canvassing_sessions`, `hh_jobs`, `hh_lead_details`, `hh_
 
 ### leads table mapping (API boundary)
 
-| External API field | DB column (`leads`) |
+The routes accept both camelCase (dashboard) and snake_case (D2D canvassing app) field names.
+
+| External API field (camelCase / snake_case) | DB column (`leads`) |
 |---|---|
 | `firstName` + `lastName` | `homeowner_name` (join/split on first space) |
-| `address` | `address_line1` |
-| `canvasser` | `assigned_rep_email` |
-| `serviceInterest` | `services_interested[0]` |
-| `followUpDate` | `next_followup_at` |
+| `homeowner_name` | `homeowner_name` (D2D alias) |
+| `address` / `address_line1` | `address_line1` |
+| `canvasser` / `rep_email` | `assigned_rep_email` |
+| `serviceInterest` / `services_interested` | `services_interested` (array) |
+| `followUpDate` / `follow_up_date` | `next_followup_at` |
+| `followUpChannel` / `follow_up_channel` | `followup_channel` |
+| `lostReason` / `lost_reason` | `lost_reason` |
+| `canvassingLeadId` / `canvassing_lead_id` | `canvassing_lead_id` (dedup key, unique index) |
 | `id` | `id` (UUID, not integer) |
+
+**D2D dedup**: `POST /canvassing/leads` checks `canvassing_lead_id`; if a match is found it upserts (HTTP 200) instead of inserting a duplicate (HTTP 201 for new).
+
+**hh_lead_details** extra column: `quote_line_items` (JSONB) — array of `{service, price, sqft}`.
+
+### sessions table mapping (D2D aliases)
+
+| D2D field | `hh_canvassing_sessions` column |
+|---|---|
+| `rep_email` | `canvasser` |
+| `rep_name` | `canvasser_name` (new column) |
+| `date` | `session_date` |
+| `doors_knocked` | `doors_knocked` |
+| `leads_created` | `people_reached` |
+| `revenue` | `revenue_sold` |
 
 ### Schema changes
 

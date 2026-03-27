@@ -33,6 +33,11 @@ export interface LeadDetail {
   changeLog: ChangeEntry[];
   linkedCustomer: Record<string, any> | null;
   linkedJobs: Record<string, any>[];
+  // D2D canvassing sync fields
+  lostReason?: string | null;
+  followUpChannel?: string | null;
+  canvassingLeadId?: string | null;
+  quoteLineItems?: Array<{ service: string; price: number; sqft?: number }> | null;
   // Historical import fields (Wolf Pack Wash)
   isHistoricalImport?: boolean;
   importBatch?: string | null;
@@ -574,6 +579,39 @@ export default function LeadDrawer({
                       value={formatCurrency(parseFloat(lead.quoteAmount))}
                     />
                   )}
+                  {lead.quoteLineItems && lead.quoteLineItems.length > 0 && (
+                    <div className="py-3">
+                      <div className="flex items-center gap-1.5 mb-2 text-slate-400">
+                        <DollarSign className="w-4 h-4" />
+                        <span className="text-xs font-semibold text-slate-500">Quote Line Items</span>
+                      </div>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-slate-400 text-left border-b border-slate-100">
+                            <th className="pb-1 font-medium">Service</th>
+                            <th className="pb-1 font-medium text-right">Sqft</th>
+                            <th className="pb-1 font-medium text-right">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lead.quoteLineItems.map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-50 last:border-0">
+                              <td className="py-1 text-slate-700">{item.service.replace(/_/g, " ")}</td>
+                              <td className="py-1 text-slate-500 text-right">{item.sqft ? item.sqft.toLocaleString() : "—"}</td>
+                              <td className="py-1 text-slate-800 font-semibold text-right">{formatCurrency(item.price)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {lead.lostReason && (
+                    <FieldRow
+                      icon={<XCircle className="w-4 h-4 text-red-400" />}
+                      label="Lost Reason"
+                      value={<span className="text-red-600">{lead.lostReason}</span>}
+                    />
+                  )}
                   {lead.source && (
                     <FieldRow
                       icon={<Tag className="w-4 h-4" />}
@@ -593,6 +631,20 @@ export default function LeadDrawer({
                       icon={<Calendar className="w-4 h-4" />}
                       label="Follow-up Date"
                       value={<span className="text-amber-600">{formatDate(lead.followUpDate)}</span>}
+                    />
+                  )}
+                  {lead.followUpChannel && (
+                    <FieldRow
+                      icon={<Tag className="w-4 h-4" />}
+                      label="Follow-up Via"
+                      value={lead.followUpChannel}
+                    />
+                  )}
+                  {lead.canvassingLeadId && (
+                    <FieldRow
+                      icon={<Tag className="w-4 h-4 text-slate-300" />}
+                      label="D2D Sync ID"
+                      value={<span className="text-slate-400 text-xs font-mono">{lead.canvassingLeadId}</span>}
                     />
                   )}
                   <FieldRow

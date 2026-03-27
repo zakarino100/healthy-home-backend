@@ -6,6 +6,7 @@ import {
   text,
   boolean,
   integer,
+  jsonb,
   timestamp,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -20,6 +21,7 @@ export const leadDetailsTable = pgTable("hh_lead_details", {
   isBundle: boolean("is_bundle").notNull().default(false),
   jobId: integer("job_id"),
   notes: text("notes"),
+  quoteLineItems: jsonb("quote_line_items"),
   // Item 2 — sync provenance
   syncSource: text("sync_source"),
   updatedBy: text("updated_by"),

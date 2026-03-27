@@ -19,6 +19,7 @@ import { sql } from "drizzle-orm";
 export const hhCanvassingSessionsTable = pgTable("hh_canvassing_sessions", {
   id: serial("id").primaryKey(),
   canvasser: text("canvasser").notNull(),
+  canvasserName: text("canvasser_name"),
   sessionDate: date("session_date").notNull(),
   neighborhood: text("neighborhood"),
   route: text("route"),
@@ -83,7 +84,10 @@ export const leadsTable = pgTable("leads", {
   followupChannel: text("followup_channel"),
   followupPriority: text("followup_priority"),
   doNotKnock: boolean("do_not_knock").default(false),
+  lostReason: text("lost_reason"),
   createdBy: text("created_by"),
+  // Canvassing app sync fields
+  canvassingLeadId: text("canvassing_lead_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   // ---------------------------------------------------------------------------
