@@ -9,7 +9,9 @@ import {
   customersTable,
   jobsTable,
   jobContentTable,
+  fbLeadDetailsTable,
 } from "@workspace/db/schema";
+import { sendMetaEvent } from "../services/meta-capi.js";
 import { eq, and, gte, lte, or, isNull, sql, ne } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -643,6 +645,19 @@ router.put("/leads/:id", async (req, res) => {
     if (finalStatus === "sold") {
       autoConvertSoldLead(req.params.id, updatedLead, updatedDetails).catch(err =>
         console.error("[autoConvert] failed for lead", req.params.id, err)
+      );
+    }
+
+    // 10. Meta Conversions API — fire when status changes
+    if (leadUpdate.status && leadUpdate.status !== row.lead.status) {
+      const [fbDetails] = await db
+        .select()
+        .from(fbLeadDetailsTable)
+        .where(eq(fbLeadDetailsTable.leadId, req.params.id))
+        .limit(1)
+        .catch(() => []);
+      sendMetaEvent(req.params.id, leadUpdate.status, updatedLead, fbDetails ?? null).catch(err =>
+        console.error("[meta-capi] failed for lead", req.params.id, err)
       );
     }
 

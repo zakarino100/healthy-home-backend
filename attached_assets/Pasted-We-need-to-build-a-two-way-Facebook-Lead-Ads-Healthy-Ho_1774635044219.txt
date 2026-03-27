@@ -1,0 +1,212 @@
+We need to build a two-way Facebook Lead Ads ↔ Healthy Home CRM integration so that:
+
+Incoming Facebook leads are captured, normalized, logged, and saved correctly in the Healthy Home backend and Supabase.
+Lead status updates inside the CRM are sent back to Meta through the Conversions API so Facebook can optimize ad delivery based on actual downstream outcomes.
+The Healthy Home backend / Supabase CRM must be the source of truth.
+
+High-level goal
+Build this so the system is fully cross-pollinated:
+
+Facebook ad leads come into our backend and Supabase correctly
+all important metadata is preserved and logged
+status/stage updates from our CRM send events back to Facebook automatically
+everything is auditable and easy to debug
+Meta dataset info
+Dataset ID: 738171941965940
+
+Meta events endpoint format:
+https://graph.facebook.com/v25.0/738171941965940/events
+
+Important security rule:
+Do not hardcode the access token into source files.
+Store the Meta token in Replit Secrets / environment variables, for example:
+
+META_DATASET_ID=738171941965940
+META_CONVERSIONS_ACCESS_TOKEN=<set in secrets>
+META_CONVERSIONS_API_VERSION=v25.0
+Then construct the endpoint from env vars in code.
+
+Critical requirements
+A) Inbound lead ingestion from Facebook
+Implement or verify a reliable path for Facebook Lead Ads submissions to enter the Healthy Home backend and Supabase.
+
+Requirements:
+
+create or upsert a lead/contact in Supabase
+preserve Facebook lead attribution
+store the original Meta lead ID
+store raw payload for debugging/audit
+store campaign/adset/ad metadata where available
+prevent duplicate contacts/leads where practical
+make sure the lead appears correctly in the Healthy Home CRM UI/dashboard
+log both success and failure cases
+At minimum, capture/store:
+
+meta_lead_id
+source = facebook_lead_ads
+source_detail
+first_name
+last_name
+full_name
+phone
+email
+address
+city
+state
+zip
+service_interest
+message
+preferred_contact
+meta_page_id
+meta_form_id
+meta_campaign_id
+meta_campaign_name
+meta_adset_id
+meta_adset_name
+meta_ad_id
+meta_ad_name
+meta_click_id
+raw_meta_payload
+created_at
+status
+status_updated_at
+If the current schema does not support these cleanly, propose and implement the needed schema additions.
+
+B) Outbound CRM-to-Meta sync
+When a lead changes stage/status inside the Healthy Home CRM, automatically send a Conversions API event back to Meta.
+
+Requirements:
+
+trigger on each important CRM stage change
+send events to the Meta dataset endpoint
+log requests/responses/errors
+save sync status back to our backend/Supabase
+avoid duplicate event spam where possible
+make retry behavior safe and idempotent where practical
+Use Meta’s required format:
+
+action_source = "system_generated"
+custom_data.event_source = "crm"
+custom_data.lead_event_source = "Healthy Home CRM" unless there is a better explicit name already used in the project
+For matching, include where available:
+
+lead_id = original Meta lead ID
+hashed email (em)
+hashed phone (ph)
+other hashed identifiers if practical
+Hash customer contact data with SHA256 in the normalized format Meta expects before sending.
+
+Required event/stage mapping
+Create a single centralized mapping from CRM status → Meta event name.
+
+Suggested default mapping:
+
+new lead created → Lead
+contacted → Contacted
+qualified → QualifiedLead
+estimate scheduled / appointment set → AppointmentScheduled
+closed won / sale → ConvertedLead
+If the current CRM uses different statuses, map them cleanly and document the mapping in one place.
+
+Logging + audit requirements
+We need strong logging and persistence, not just fire-and-forget.
+
+For inbound Facebook leads:
+
+save the raw inbound payload
+save normalized payload/parsed fields if useful
+save whether lead creation/upsert succeeded
+save duplicate detection results if applicable
+For outbound Meta sync:
+
+save event name
+save event payload sent
+save response status/body
+save timestamp of attempt
+save success/failure status
+save error details if any
+save last successful sync timestamp
+If there is not already a good place for this, create an integration log table or equivalent.
+
+Suggested fields for tracking:
+
+last_meta_sync_at
+last_meta_sync_status
+last_meta_sync_error
+last_meta_event_name
+meta_sync_attempt_count
+Dedupe/upsert logic
+Implement practical dedupe logic using:
+
+meta_lead_id first if present
+normalized phone
+normalized email
+Rules:
+
+do not create duplicate contacts if an existing one matches
+do not lose the original Meta lead ID
+if a lead already exists, update intelligently without corrupting the record
+maintain source attribution history if possible
+Schema review
+Inspect the current backend and Supabase structure and answer:
+
+what tables/models already exist for leads/contacts
+what fields already exist
+what new fields/tables are needed
+where inbound raw payloads and outbound sync logs should live
+how this will appear in the CRM dashboard/UI
+Environment variables / secrets
+Use environment variables only. Do not expose secrets in client-side code or commit them.
+
+Expected env vars:
+
+META_DATASET_ID
+META_CONVERSIONS_ACCESS_TOKEN
+META_CONVERSIONS_API_VERSION
+any Facebook webhook verification secret if inbound webhook handling requires one
+Implementation details
+Please inspect the existing codebase and then:
+
+identify exact files/routes/services that should handle inbound Facebook lead ingestion
+identify exact files/routes/services that should handle outbound Meta sync
+implement the code changes
+implement any necessary schema changes/migrations
+make sure all logs and saved fields persist correctly to Supabase/backend
+document how to test the full round trip
+Testing requirements
+Provide a full test checklist for:
+
+ingesting a test Facebook lead
+confirming it appears correctly in Supabase
+confirming it appears correctly in the HH CRM UI
+changing the lead status in the CRM
+confirming the corresponding event is sent to Meta
+confirming success/failure is logged in our backend
+confirming retries/error handling work correctly
+Output format
+When finished, return:
+
+architecture summary
+existing schema/code assessment
+exact files changed
+exact schema changes made
+inbound ingestion flow
+outbound Meta sync flow
+CRM status → Meta event mapping
+environment variables required
+testing checklist
+any risks / edge cases / recommended hardening
+Important notes
+Healthy Home backend / Supabase must remain the canonical source of truth
+do not hardcode access tokens into source files
+do not leave logging half-finished
+make sure leads are both saved operationally in the CRM and logged for debugging/audit
+prefer implementation-ready code over vague recommendations
+After sending that prompt
+Also send your Replit agent this separate instruction right after:
+
+Set these Replit Secrets and use them in the implementation:
+
+META_DATASET_ID=738171941965940
+META_CONVERSIONS_API_VERSION=v25.0
+META_CONVERSIONS_ACCESS_TOKEN=<paste the token here in Replit Secrets only, not source code>

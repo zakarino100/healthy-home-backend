@@ -12,6 +12,7 @@ import calendarRouter from "./calendar";
 import tasksRouter from "./tasks";
 import phoneRouter from "./phone";
 import formRouter from "./form";
+import facebookRouter from "./facebook";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/calendar", calendarRouter);
 router.use("/tasks", tasksRouter);
 router.use("/phone", phoneRouter);
 router.use("/form", formRouter);
+router.use("/facebook", facebookRouter);
 
 export default router;

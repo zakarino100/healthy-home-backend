@@ -213,6 +213,65 @@ cd lib/api-client-react && pnpm exec tsc --build  # rebuild declarations
 - Warm transfer requires Twilio telephony (not Vapi-native numbers)
 - After `lib/db` schema changes: run `pnpm --filter @workspace/db exec tsc -p tsconfig.json` to regenerate `.d.ts`
 
+## Facebook Lead Ads ↔ Meta Conversions API Integration
+
+### New tables
+| Table | Purpose |
+|---|---|
+| `hh_fb_lead_details` | One-to-one with `leads`. Stores Facebook attribution (campaign/ad/form IDs, raw Graph API payload) + CAPI outbound sync tracking |
+| `hh_integration_logs` | Full audit trail for all inbound Facebook leads and outbound CAPI events |
+
+### New routes
+| Route | Purpose |
+|---|---|
+| `GET /api/facebook/webhook` | Meta hub.challenge verification (required by Facebook to subscribe) |
+| `POST /api/facebook/webhook` | Inbound Lead Ads webhook — fetches lead from Graph API, inserts/upserts lead, logs audit |
+
+### Inbound webhook flow
+1. Meta sends `POST /api/facebook/webhook` with `leadgen_id` notification
+2. Server immediately responds 200 (Meta requires fast response)
+3. Fetches full lead data from Graph API (`/{leadgen_id}?fields=field_data,ad_id,...`)
+4. Deduplicates on `meta_lead_id` → phone → email (in that priority order)
+5. Creates/upserts lead in `leads` table with `source="facebook_lead_ads"`
+6. Creates/upserts `hh_fb_lead_details` row with all campaign attribution
+7. Fires initial "Lead" CAPI event back to Meta for the new lead
+8. Writes audit entry to `hh_integration_logs`
+
+### Outbound CAPI flow (CRM status → Meta event)
+Triggered automatically on `PUT /api/canvassing/leads/:id` when status changes.
+
+| CRM status | Meta event name |
+|---|---|
+| `new` | `Lead` |
+| `contacted` | `Contacted` |
+| `quoted` | `QualifiedLead` |
+| `scheduled` | `AppointmentScheduled` |
+| `sold` | `ConvertedLead` |
+| `lost` | *(no event)* |
+
+### Environment variables required
+| Variable | Where set | Notes |
+|---|---|---|
+| `META_DATASET_ID` | env var (set) | `738171941965940` |
+| `META_CONVERSIONS_API_VERSION` | env var (set) | `v25.0` |
+| `META_CONVERSIONS_ACCESS_TOKEN` | Replit Secret | Sensitive — user must set |
+| `FACEBOOK_WEBHOOK_VERIFY_TOKEN` | Replit Secret | Custom string used when registering webhook in Meta dashboard |
+
+### Meta dashboard setup (one-time)
+1. Set `META_CONVERSIONS_ACCESS_TOKEN` and `FACEBOOK_WEBHOOK_VERIFY_TOKEN` secrets in Replit
+2. In Meta Business Suite → Events Manager → your dataset → Settings → Add Data Source → Web → Use Conversions API
+3. Register the webhook at: `https://healthy-home-backend.replit.app/api/facebook/webhook`
+4. Enter the same value as `FACEBOOK_WEBHOOK_VERIFY_TOKEN` when Meta asks for it
+5. Subscribe to the `leadgen` field on your Page
+
+### Key design decisions
+- Webhook returns 200 immediately; Graph API fetch and DB writes happen asynchronously
+- PII is SHA256-hashed (email normalized lowercase, phone digits-only) before sending to Meta
+- `meta_lead_id` unique index prevents duplicate lead creation on webhook retries
+- `hh_integration_logs` is a soft audit table — no FK constraint so log survives lead soft-delete
+- CAPI fires fire-and-forget with full error logging; failure never blocks CRM updates
+- If `META_CONVERSIONS_ACCESS_TOKEN` is not set, CAPI events are silently skipped (with console warning)
+
 ## DB Migrations
 
 For simple additive schema changes:
