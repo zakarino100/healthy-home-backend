@@ -1,0 +1,118 @@
+You are updating the Healthy Home backend CRM at healthy-home-backend.replit.app.
+
+A separate canvassing app (built in React Native/Expo) is used by field reps to knock doors, 
+log visits, and capture leads. All data from that app needs to display fully in this CRM. 
+Here is everything you need to know about the data it sends.
+
+---
+
+## HOW THE CANVASSING APP SYNCS
+
+The canvassing app hits these endpoints on this backend (already partially built):
+  POST /api/canvassing/leads          — new lead created in the field
+  PUT  /api/canvassing/leads/:id      — lead updated (status change, contact info, etc.)
+  POST /api/canvassing/leads/:id/convert — lead marked sold (creates a customer record)
+  POST /api/canvassing/sessions       — daily session summary pushed by a rep
+
+These are open endpoints (no auth required from canvassing app side).
+
+---
+
+## LEAD DATA SHAPE (POST/PUT /api/canvassing/leads)
+
+{
+  canvassing_lead_id: string,      // UUID from canvassing app — store this to match future updates
+  rep_email: string,               // who logged it
+  address_line1: string,
+  city: string,
+  state: string,
+  zip: string,
+  latitude: number,
+  longitude: number,
+  homeowner_name: string | null,   // full name
+  phone: string | null,
+  email: string | null,
+  status: string,                  // see status mapping below
+  services_interested: string[],   // e.g. ["House Wash", "Gutter Cleaning"]
+  notes: string | null,            // free text + auto-appended door outcome note
+  lost_reason: string | null,      // e.g. "price", "already_had_it", "not_interested"
+  quote_amount: number | null,     // total dollar value if quoted
+  quote_line_items: [              // individual services quoted
+    { service: string, price: number, sqft: string }
+  ],
+  follow_up_date: string | null,   // ISO date string if a follow-up was scheduled
+  follow_up_channel: string | null // "call" | "text" | "email" | "in_person"
+}
+
+Status values the canvassing app sends (already mapped):
+  "new"       → not_home, knocked_no_answer, inaccessible, do_not_knock
+  "lost"      → not_interested, do_not_knock
+  "follow_up" → follow_up, callback_set
+  "quoted"    → quote_given, estimate_scheduled
+  "sold"      → sold, won, completed
+
+---
+
+## SESSION SUMMARY (POST /api/canvassing/sessions)
+
+{
+  rep_email: string,
+  rep_name: string,
+  date: string,               // YYYY-MM-DD
+  doors_knocked: number,
+  leads_created: number,
+  closes: number,
+  revenue: number             // sum of sold quote amounts for that day
+}
+
+---
+
+## CUSTOMER CONVERSION (POST /api/canvassing/leads/:id/convert)
+
+Called when a lead is marked "sold". Should create or update a customer record with:
+{
+  canvassing_lead_id: string,
+  homeowner_name: string,
+  phone: string,
+  email: string,
+  address_line1: string,
+  city: string,
+  state: string,
+  zip: string,
+  services: string[],
+  quote_amount: number,
+  sold_by: string,            // rep email
+  sold_at: string             // ISO timestamp
+}
+
+---
+
+## WHAT NEEDS TO DISPLAY IN THE CRM
+
+1. **Leads list** — all canvassing leads with: name, address, status badge, assigned rep, 
+   date created, services interested, quote amount. Filterable by status and rep.
+
+2. **Lead detail** — full contact info, timeline of status changes, quote line items 
+   (service + size + price), follow-up date/channel, notes, map pin location.
+
+3. **Customers** — converted (sold) leads shown as customers with services purchased and 
+   revenue value.
+
+4. **Rep leaderboard / analytics** — sessions table showing per-rep daily stats: 
+   doors knocked, leads, closes, revenue. Aggregated weekly and monthly totals.
+
+5. **Live activity feed** — recent leads and status changes as they come in from the field.
+
+---
+
+## IMPORTANT NOTES
+
+- The canvassing app stores the backend's returned lead ID in leads.backend_lead_id so it 
+  can match future PUT updates. Make sure POST /api/canvassing/leads returns { id: <your_id> }.
+- Duplicate prevention: use canvassing_lead_id as a unique key so re-syncs don't 
+  create duplicate records.
+- The notes field may contain auto-appended door context like "Door: Not Home." prepended 
+  to any rep-written notes — display this as-is.
+- quote_line_items is a JSON array — store it as JSONB or equivalent.
+- Services list: House Wash, Cement Cleaning, Roof Wash, Gutter Cleaning, Window Cleaning, 
+  Deck Staining, Driveway Sealing, Holiday Lighting, Other.
