@@ -284,4 +284,227 @@ router.post("/webhook", async (req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/facebook/backfill
+//
+// One-time (or repeatable) backfill: fetches every lead ever submitted to a
+// Facebook Lead Ads form via the Graph API and upserts any that are missing
+// from Supabase.  Deduplicates on meta_lead_id, then falls back to phone/email.
+//
+// Auth: requires X-HH-Token header matching FORM_SUBMIT_SECRET env var.
+//
+// Body: { "form_id": "<your_FB_form_id>" }
+// Optional: { "form_id": "...", "page_id": "..." }
+//
+// Returns: { inserted, skipped, errors, leads: [{...}] }
+// ---------------------------------------------------------------------------
+
+const ADMIN_TOKEN = () => process.env.FORM_SUBMIT_SECRET ?? "";
+
+router.post("/backfill", async (req: Request, res: Response) => {
+  // ── Auth check ─────────────────────────────────────────────────────────────
+  const token = req.headers["x-hh-token"] as string | undefined;
+  if (!ADMIN_TOKEN() || token !== ADMIN_TOKEN()) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const { form_id: formId, page_id: pageId } = req.body ?? {};
+  if (!formId) {
+    return res.status(400).json({ error: "form_id is required" });
+  }
+
+  const accessToken = ACCESS_TOKEN();
+  if (!accessToken) {
+    return res.status(500).json({ error: "META_CONVERSIONS_ACCESS_TOKEN is not configured" });
+  }
+
+  console.log(`[facebook/backfill] Starting backfill for form_id=${formId}`);
+
+  // ── Optional: fetch form metadata (page_id, form name) ───────────────────
+  let resolvedPageId = pageId ?? null;
+  let formName = formId;
+  try {
+    const formMeta = await fetch(
+      `${GRAPH_BASE}/${formId}?fields=id,name,page&access_token=${accessToken}`
+    ).then(r => r.json()) as any;
+
+    if (formMeta.error) {
+      console.warn("[facebook/backfill] Could not fetch form metadata:", formMeta.error?.message);
+    } else {
+      formName = formMeta.name ?? formId;
+      resolvedPageId = resolvedPageId ?? formMeta.page?.id ?? null;
+    }
+  } catch (err: any) {
+    console.warn("[facebook/backfill] form metadata fetch failed:", err.message);
+  }
+
+  // ── Paginate through all leads on the form ────────────────────────────────
+  const fields = "id,created_time,field_data,ad_id,adset_id,campaign_id,ad_name,adset_name,campaign_name";
+  let nextUrl: string | null =
+    `${GRAPH_BASE}/${formId}/leads?fields=${fields}&limit=100&access_token=${accessToken}`;
+
+  const allGraphLeads: any[] = [];
+  let pageCount = 0;
+
+  while (nextUrl) {
+    const page = await fetch(nextUrl).then(r => r.json()) as any;
+
+    if (page.error) {
+      console.error("[facebook/backfill] Graph API error:", page.error);
+      return res.status(502).json({ error: "Graph API error", detail: page.error });
+    }
+
+    allGraphLeads.push(...(page.data ?? []));
+    nextUrl = page.paging?.next ?? null;
+    pageCount++;
+    console.log(`[facebook/backfill] Page ${pageCount}: fetched ${page.data?.length ?? 0} leads (total so far: ${allGraphLeads.length})`);
+  }
+
+  console.log(`[facebook/backfill] Total leads from Meta: ${allGraphLeads.length}`);
+
+  // ── Fetch all existing meta_lead_ids so we can fast-dedup in memory ───────
+  const existingFbRows = await db
+    .select({ metaLeadId: fbLeadDetailsTable.metaLeadId, leadId: fbLeadDetailsTable.leadId })
+    .from(fbLeadDetailsTable)
+    .catch(() => []);
+
+  const existingMetaIds = new Set(existingFbRows.map(r => r.metaLeadId).filter(Boolean));
+
+  // ── Process each lead ────────────────────────────────────────────────────
+  const results: Array<{ metaLeadId: string; action: "inserted" | "skipped"; name?: string; reason?: string }> = [];
+  let insertedCount = 0;
+  let skippedCount  = 0;
+  let errorCount    = 0;
+
+  for (const graphLead of allGraphLeads) {
+    const leadgenId = String(graphLead.id ?? "");
+    if (!leadgenId) { errorCount++; continue; }
+
+    // 1. Dedup on meta_lead_id (fast in-memory check)
+    if (existingMetaIds.has(leadgenId)) {
+      skippedCount++;
+      results.push({ metaLeadId: leadgenId, action: "skipped", reason: "meta_lead_id already exists" });
+      continue;
+    }
+
+    const { firstName, lastName, fullName, phone, email, address, city, state, zip, service, message } =
+      parseFieldData(graphLead.field_data ?? []);
+
+    // 2. Phone/email dedup (check DB)
+    let existingLeadId: string | null = null;
+    if (phone || email) {
+      const conditions: any[] = [];
+      if (phone)  conditions.push(eq(leadsTable.phone, phone));
+      if (email)  conditions.push(eq(leadsTable.email, email));
+      const hit = await db
+        .select({ id: leadsTable.id })
+        .from(leadsTable)
+        .where(or(...conditions))
+        .limit(1)
+        .catch(() => []);
+      if (hit.length > 0) existingLeadId = hit[0].id;
+    }
+
+    try {
+      let leadId: string;
+
+      if (existingLeadId) {
+        // Update existing lead's source attribution if it came from FB
+        leadId = existingLeadId;
+        await db
+          .update(leadsTable)
+          .set({
+            source: FB_SOURCE,
+            ...(email   ? { email }   : {}),
+            ...(address ? { addressLine1: address } : {}),
+            ...(city    ? { city }    : {}),
+            ...(state   ? { state }   : {}),
+            ...(zip     ? { zip }     : {}),
+          })
+          .where(eq(leadsTable.id, leadId))
+          .catch(console.error);
+      } else {
+        // Insert brand-new lead
+        const createdAt = graphLead.created_time ? new Date(graphLead.created_time) : new Date();
+        const [inserted] = await db
+          .insert(leadsTable)
+          .values({
+            homeownerName: fullName || `${firstName} ${lastName}`.trim() || "Unknown",
+            phone,
+            email,
+            addressLine1: address ?? "",
+            city,
+            state,
+            zip,
+            source:       FB_SOURCE,
+            businessUnit: HH_BUSINESS,
+            status:       "new",
+            createdAt,
+          })
+          .returning({ id: leadsTable.id });
+        leadId = inserted.id;
+      }
+
+      // Upsert hh_fb_lead_details
+      await db
+        .insert(fbLeadDetailsTable)
+        .values({
+          leadId,
+          metaLeadId:      leadgenId,
+          metaPageId:      resolvedPageId,
+          metaFormId:      formId,
+          metaCampaignId:  graphLead.campaign_id ?? null,
+          metaCampaignName: graphLead.campaign_name ?? null,
+          metaAdsetId:     graphLead.adset_id   ?? null,
+          metaAdsetName:   graphLead.adset_name  ?? null,
+          metaAdId:        graphLead.ad_id       ?? null,
+          metaAdName:      graphLead.ad_name     ?? null,
+          rawPayload:      graphLead as any,
+        })
+        .onConflictDoUpdate({
+          target: fbLeadDetailsTable.leadId,
+          set: {
+            metaLeadId:  leadgenId,
+            metaFormId:  formId,
+            rawPayload:  graphLead as any,
+            updatedAt:   new Date(),
+          },
+        })
+        .catch(console.error);
+
+      // Audit log
+      await db.insert(integrationLogsTable).values({
+        direction:   "inbound",
+        integration: "facebook_lead_ads",
+        eventType:   "backfill",
+        leadId,
+        payloadSent: graphLead as any,
+        status:      "success",
+      }).catch(console.error);
+
+      existingMetaIds.add(leadgenId); // prevent re-insert if same ID appears twice in API response
+      insertedCount++;
+      results.push({ metaLeadId: leadgenId, action: "inserted", name: fullName || phone || email });
+      console.log(`[facebook/backfill] ✓ Inserted lead ${leadId} (${fullName || phone})`);
+
+    } catch (err: any) {
+      errorCount++;
+      console.error(`[facebook/backfill] Failed for leadgen_id=${leadgenId}:`, err.message);
+      results.push({ metaLeadId: leadgenId, action: "skipped", reason: `error: ${err.message}` });
+    }
+  }
+
+  console.log(`[facebook/backfill] Done — inserted:${insertedCount} skipped:${skippedCount} errors:${errorCount}`);
+
+  return res.json({
+    form_id:   formId,
+    form_name: formName,
+    total_from_meta: allGraphLeads.length,
+    inserted: insertedCount,
+    skipped:  skippedCount,
+    errors:   errorCount,
+    leads: results,
+  });
+});
+
 export default router;
