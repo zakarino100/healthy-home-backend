@@ -25,8 +25,9 @@ import { sendMetaEvent } from "../services/meta-capi.js";
 
 const router = Router();
 
-const FB_SOURCE      = "facebook_lead_ads";
-const HH_BUSINESS    = "Healthy Home";
+const FB_SOURCE          = "ad";                       // maps to "Advertisement" category in dashboard
+const FB_SOURCE_ORIGINAL = "Meta - Wolf Pack Wash";    // specific sub-source shown in lead detail
+const HH_BUSINESS        = "Healthy Home";
 const VERIFY_TOKEN   = () => process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN ?? "";
 const ACCESS_TOKEN   = () => process.env.META_CONVERSIONS_ACCESS_TOKEN ?? "";
 const GRAPH_BASE     = "https://graph.facebook.com/v25.0";
@@ -214,7 +215,8 @@ router.post("/webhook", async (req: Request, res: Response) => {
             ...(city    ? { city }    : {}),
             ...(state   ? { state }   : {}),
             ...(zip     ? { zip }     : {}),
-            source: FB_SOURCE,   // ensure source attribution
+            source:             FB_SOURCE,
+            leadSourceOriginal: FB_SOURCE_ORIGINAL,
           })
           .where(eq(leadsTable.id, leadId))
           .catch(console.error);
@@ -230,9 +232,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
             city,
             state,
             zip,
-            source:       FB_SOURCE,
-            businessUnit: HH_BUSINESS,
-            status:       "new",
+            source:             FB_SOURCE,
+            leadSourceOriginal: FB_SOURCE_ORIGINAL,
+            businessUnit:       HH_BUSINESS,
+            status:             "new",
           })
           .returning({ id: leadsTable.id });
 
@@ -414,7 +417,8 @@ router.post("/backfill", async (req: Request, res: Response) => {
         await db
           .update(leadsTable)
           .set({
-            source: FB_SOURCE,
+            source:             FB_SOURCE,
+            leadSourceOriginal: FB_SOURCE_ORIGINAL,
             ...(email   ? { email }   : {}),
             ...(address ? { addressLine1: address } : {}),
             ...(city    ? { city }    : {}),
@@ -436,9 +440,10 @@ router.post("/backfill", async (req: Request, res: Response) => {
             city,
             state,
             zip,
-            source:       FB_SOURCE,
-            businessUnit: HH_BUSINESS,
-            status:       "new",
+            source:             FB_SOURCE,
+            leadSourceOriginal: FB_SOURCE_ORIGINAL,
+            businessUnit:       HH_BUSINESS,
+            status:             "new",
             createdAt,
           })
           .returning({ id: leadsTable.id });

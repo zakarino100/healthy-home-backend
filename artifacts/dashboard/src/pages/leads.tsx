@@ -353,7 +353,9 @@ export default function LeadsPage() {
                         </span>
                       ) : (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border ${SOURCE_COLORS[lead.source as Source ?? "other"]}`}>
-                          {SOURCE_LABELS[lead.source as Source ?? "other"]}
+                          {lead.source === "ad" && lead.leadSourceOriginal
+                            ? lead.leadSourceOriginal
+                            : SOURCE_LABELS[lead.source as Source ?? "other"]}
                         </span>
                       )}
                       <Badge variant={STATUS_VARIANT[lead.status ?? "new"] ?? "neutral"}>
