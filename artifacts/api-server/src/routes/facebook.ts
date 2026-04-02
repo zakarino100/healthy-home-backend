@@ -28,22 +28,24 @@ const router = Router();
 const FB_SOURCE          = "ad";                       // maps to "Advertisement" category in dashboard
 const FB_SOURCE_ORIGINAL = "Meta - Wolf Pack Wash";    // specific sub-source shown in lead detail
 const HH_BUSINESS        = "Healthy Home";
-const VERIFY_TOKEN   = () => process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN ?? "";
-const ACCESS_TOKEN   = () => process.env.META_CONVERSIONS_ACCESS_TOKEN ?? "";
-const GRAPH_BASE     = "https://graph.facebook.com/v25.0";
+const VERIFY_TOKEN      = () => process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN ?? "";
+const ACCESS_TOKEN      = () => process.env.META_CONVERSIONS_ACCESS_TOKEN ?? "";  // CAPI outbound events
+const PAGE_ACCESS_TOKEN = () => process.env.FACEBOOK_PAGE_ACCESS_TOKEN ?? "";     // Graph API lead fetch (page-level)
+const GRAPH_BASE        = "https://graph.facebook.com/v25.0";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Fetch the full lead from Graph API using the leadgen_id */
+/** Fetch the full lead from Graph API using the leadgen_id.
+ *  Must use the PAGE access token — system user tokens are rejected by this endpoint. */
 async function fetchGraphLead(leadgenId: string): Promise<Record<string, any> | null> {
-  const token = ACCESS_TOKEN();
+  const token = PAGE_ACCESS_TOKEN() || ACCESS_TOKEN(); // prefer page token; fall back to system token
   if (!token) {
-    console.warn("[facebook] META_CONVERSIONS_ACCESS_TOKEN not set — cannot fetch lead");
+    console.warn("[facebook] FACEBOOK_PAGE_ACCESS_TOKEN not set — cannot fetch lead data");
     return null;
   }
-  const fields = "field_data,created_time,id,ad_id,adset_id,campaign_id,form_id,page_id";
+  const fields = "field_data,created_time,id,ad_id,adset_id,campaign_id,ad_name,adset_name,campaign_name,form_id,page_id";
   const url = `${GRAPH_BASE}/${leadgenId}?fields=${fields}&access_token=${token}`;
 
   const res = await fetch(url);
