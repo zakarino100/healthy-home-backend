@@ -1,0 +1,782 @@
+Healthy Home OS — Replit Agent Build Spec
+Version: 2.1
+Target: Replit Agent
+Purpose: Extend the existing Healthy Home canvassing app into a lightweight operating system for sales, fulfillment, reviews, content capture, dashboards, and Robin daily analysis.
+
+READ THIS FIRST — Instructions for Replit Agent
+You are working on an existing app for a home services company called Healthy Home.
+
+Healthy Home is a local exterior cleaning / softwashing business with these core offers:
+
+House Wash
+Driveway Cleaning
+Bundle = House Wash + Driveway Cleaning
+Your job is to inspect the existing codebase first, then extend it cleanly into a practical business operating backend.
+
+Follow these rules exactly
+Inspect the current project architecture first.
+Extend what already exists instead of replacing it.
+Do not rebuild the app from scratch unless absolutely necessary.
+Do not add unrelated features.
+Build in sensible phases.
+Backend correctness, reporting, and workflow integrity matter more than frontend polish.
+When something already exists, reuse and improve it.
+If the current project stack differs from the suggested stack below, prefer preserving the current architecture where reasonable and document any tradeoffs.
+Do not ask clarifying questions unless there is a true blocker. Default to practical implementation choices.
+Test each major phase before moving on.
+Core business context
+Healthy Home currently sells primarily through door-to-door canvassing.
+
+This system should become a lightweight operating system for:
+
+sales activity
+leads
+customers
+jobs
+fulfillment
+review capture
+customer satisfaction triage
+content capture
+owner dashboards
+daily reporting
+Robin business analysis integration
+Daily KPI targets this app must support
+20 good conversations/day
+4 closes/day
+$1,200+ revenue sold/day
+1+ bundle sale/day
+100% of completed jobs enter review workflow
+100% of completed jobs track before/after content capture
+Architecture instructions
+First task: audit the existing app
+Before implementing anything, do this:
+
+Inspect the current codebase
+Identify:
+frontend framework
+backend/server structure
+database/provider
+auth approach
+existing data models
+existing routes/APIs
+existing dashboard/canvassing features
+Summarize:
+what already exists
+what can be reused
+what must be added
+what should be refactored minimally
+Then implement the missing pieces in a phased way
+Stack guidance
+If the current app already uses a viable stack, keep it.
+
+If backend pieces are missing and a stack choice is needed, prefer this stack only if it aligns cleanly with the current project:
+
+Frontend: React
+Backend: Node.js + Express
+Database: PostgreSQL / Supabase
+ORM: Prisma
+Scheduling: node-cron
+Storage: Supabase Storage
+Delivery integrations: modular, provider-agnostic
+Hosting: Replit
+Do not force a second parallel architecture if the app already has one.
+
+Required system modules
+Build or extend the app to support the following modules.
+
+Phase 1 — Data model / backend structure
+Create or extend models for the following core entities.
+
+1. Users / team members
+Support users such as:
+
+admin
+canvasser
+technician
+Suggested fields:
+
+id
+name
+email
+role
+active
+createdAt
+2. Canvassing activity logs
+Track field sales activity.
+
+Required fields:
+
+id
+userId
+date
+neighborhood
+route
+doorsKnocked
+peopleReached
+goodConversations
+quotesGiven
+closes
+revenueSold
+averageTicket
+bundleCount
+drivewayAddOnCount
+notes
+createdAt
+Behavior:
+
+calculate averageTicket = revenueSold / closes, or 0 if closes = 0
+3. Leads
+Track lead-level sales pipeline.
+
+Required fields:
+
+id
+canvasserId
+firstName
+lastName
+phone
+email
+address
+city
+state
+zip
+serviceInterest
+house_wash
+driveway
+bundle
+quoteAmount
+status
+new
+quoted
+follow_up
+sold
+lost
+followUpDate
+notes
+source
+d2d
+referral
+ad
+other
+createdAt
+updatedAt
+Support converting a sold lead into a customer.
+
+4. Customers
+Required fields:
+
+id
+leadId (optional)
+firstName
+lastName
+phone
+email
+address
+city
+state
+zip
+notes
+optOut
+createdAt
+updatedAt
+Customers should be related to:
+
+jobs
+review workflows
+prior service history
+5. Jobs
+Required fields:
+
+id
+customerId
+technicianId
+serviceType
+house_wash
+driveway
+bundle
+packageType
+quotedPrice
+soldPrice
+status
+scheduled
+completed
+rescheduled
+canceled
+scheduledAt
+completedAt
+paymentStatus
+unpaid
+paid
+partial
+paymentAmountCollected
+neighborhood (if available)
+notes
+createdAt
+updatedAt
+When a job is marked completed:
+
+set status = completed
+set completedAt = now
+ensure a content record exists
+create a review workflow record
+trigger satisfaction workflow
+6. Review workflow
+This is a key feature.
+
+Each completed job should be able to enter a review workflow.
+
+Required fields:
+
+id
+jobId
+customerId
+status
+pending
+satisfaction_sent
+satisfaction_responded
+review_link_sent
+review_completed
+feedback_requested
+issue_flagged
+resolved
+satisfactionScore
+satisfactionSentAt
+satisfactionRespondedAt
+reviewLinkSentAt
+reviewCompletedAt
+feedbackSentAt
+feedbackReceivedAt
+issueFlag
+issueNotes
+reviewCampaign
+deliveryChannel
+sms
+email
+manual
+unknown
+deliveryStatus
+pending
+sent
+failed
+skipped
+createdAt
+updatedAt
+Workflow logic
+When job is completed:
+
+customer enters review queue
+send satisfaction request first
+if satisfaction score is 4 or 5, send Google review link
+if satisfaction score is 1, 2, or 3, send internal feedback form and flag issue
+support batch campaigns for previously serviced customers
+Important principle
+This is a customer satisfaction triage system, not a manipulative review filter.
+The goal is:
+
+invite happy customers to leave a public review
+route unhappy customers into internal service recovery
+7. Job content
+Track content generated from completed jobs.
+
+Required fields:
+
+id
+jobId
+beforePhotoUrls
+afterPhotoUrls
+videoCaptured
+contentReady
+reviewScreenshotCaptured
+notes
+createdAt
+updatedAt
+Every completed job should support:
+
+before photos
+after photos
+short video capture
+content-ready status
+8. Daily reports
+Create a daily report entity that stores end-of-day business summaries.
+
+Required fields:
+
+id
+date
+doorsKnocked
+goodConversations
+quotesGiven
+closes
+closeRate
+revenueSold
+averageTicket
+bundlesSold
+jobsCompleted
+cashCollected
+reviewRequestsSent
+positiveSatisfactionCount
+negativeSatisfactionCount
+reviewsReceived
+topCanvasserId
+topTechnicianId
+openIssuesCount
+anomalyNotes
+rawPayload
+deliveryStatus
+deliveryMode
+deliveredAt
+createdAt
+The rawPayload should store the canonical Robin analysis JSON.
+
+Optional but recommended
+If practical without overcomplicating the build, include a simple event log / activity table for actions like:
+
+job completed
+satisfaction request sent
+review link sent
+feedback requested
+issue flagged
+report generated
+report delivered
+This is useful for debugging and auditing.
+
+Phase 2 — Core API / backend services
+Build or extend backend routes/services for the following modules.
+
+All routes should return JSON and use standard HTTP status codes.
+
+Canvassing routes
+Support:
+
+list logs
+filter by date and user
+create log
+update log
+delete log
+get single log
+Required filters:
+
+date
+userId
+Leads routes
+Support:
+
+list leads
+filter by status, canvasser, and date
+create lead
+update lead
+delete lead
+get single lead
+convert lead to customer
+Customers routes
+Support:
+
+list customers
+create customer
+update customer
+get customer detail
+get customer jobs
+Jobs routes
+Support:
+
+list jobs
+filter by status, date, technician
+create job
+update job
+get single job
+complete job
+Complete job behavior
+When completing a job:
+
+mark completed
+create content record if missing
+create review workflow if missing
+trigger satisfaction workflow
+return updated job with related data
+Reviews routes
+Support:
+
+list review workflows
+filter by status and issueFlag
+get workflow detail
+submit satisfaction score
+resolve issue
+trigger campaign batch for old customers
+Satisfaction submission logic
+Input:
+
+{ "score": 1 }
+Behavior:
+
+save score and timestamp
+if score >= 4:
+send Google review request
+update status to review_link_sent
+if score <= 3:
+send feedback form request
+update status to feedback_requested
+set issueFlag = true
+return updated workflow
+Content routes
+Support:
+
+list content records
+filter by contentReady
+get content by job
+update content with URLs and flags
+Dashboard routes
+Support:
+
+today summary
+week summary
+tomorrow jobs
+unresolved issues
+canvasser leaderboard
+Daily dashboard response should include
+date
+doorsKnocked
+goodConversations
+quotesGiven
+closes
+revenueSold
+averageTicket
+bundlesSold
+jobsCompleted
+cashCollected
+reviewRequestsSent
+reviewsReceived
+openIssues
+targets with met/not met booleans
+Targets:
+
+good conversations = 20
+closes = 4
+revenue sold = 1200
+bundles = 1
+Reports routes
+Support:
+
+list daily reports by date range
+get daily report by date
+manually trigger report generation
+export report as CSV or JSON
+Phase 3 — Review workflow and delivery abstraction
+Do not build this as email-only.
+
+The review and satisfaction system must be delivery-channel agnostic.
+
+Design principle
+Each outbound workflow message should support:
+
+SMS
+email
+manual logging
+future provider integrations
+If no provider is configured yet:
+
+still update workflow state
+log the intended outbound payload
+mark delivery status appropriately
+Required services
+Build or extend:
+
+sendSatisfactionRequest
+sendGoogleReviewLink
+sendFeedbackForm
+flagIssue
+sendCampaignBatch
+Each should:
+
+update workflow state
+log outcome
+support pluggable delivery adapters
+Delivery configuration
+Use environment variables like:
+
+REVIEW_DELIVERY_MODE=sms
+GOOGLE_REVIEW_LINK=
+FEEDBACK_FORM_URL=
+Optional provider-specific keys may be added if needed.
+
+Phase 4 — Daily report generation and Robin integration
+This is one of the most important pieces.
+
+The system must generate a canonical daily business summary payload at end of day.
+
+Daily report must include
+Sales metrics
+doors knocked
+good conversations
+quotes given
+closes
+close rate
+revenue sold
+average ticket
+bundles sold
+Fulfillment metrics
+jobs completed
+cash collected
+tomorrow’s scheduled jobs count
+Review metrics
+satisfaction requests sent
+positive responses
+negative responses
+reviews received
+Team metrics
+top canvasser
+top technician
+active canvasser count
+Issue metrics
+open issues count
+open issue details
+Daily targets
+goal vs actual vs met
+good conversations
+closes
+revenue sold
+bundles
+Anomaly notes
+Populate plain-English anomaly notes when relevant, e.g.:
+
+low conversation count
+no closes
+no revenue
+unhappy customers need follow-up
+too many open issues
+Canonical Robin payload format
+Every saved daily report should store a machine-readable JSON payload in this structure:
+
+{
+"business_name": "Healthy Home",
+"report_date": "2026-01-15",
+"sales_metrics": {
+"doors_knocked": 0,
+"good_conversations": 0,
+"quotes_given": 0,
+"closes": 0,
+"close_rate_pct": 0,
+"revenue_sold": 0,
+"average_ticket": 0,
+"bundles_sold": 0
+},
+"fulfillment_metrics": {
+"jobs_completed": 0,
+"cash_collected": 0,
+"jobs_scheduled_tomorrow": 0
+},
+"review_metrics": {
+"satisfaction_requests_sent": 0,
+"positive_responses": 0,
+"negative_responses": 0,
+"reviews_received": 0
+},
+"team_metrics": {
+"top_canvasser": null,
+"top_technician": null,
+"canvasser_count_active_today": 0
+},
+"open_issues": {
+"count": 0,
+"details": []
+},
+"next_day_schedule": [],
+"daily_targets": {
+"good_conversations": { "goal": 20, "actual": 0, "met": false },
+"closes": { "goal": 4, "actual": 0, "met": false },
+"revenue_sold": { "goal": 1200, "actual": 0, "met": false },
+"bundles": { "goal": 1, "actual": 0, "met": false }
+},
+"anomaly_notes": "Plain English notes here."
+}
+Robin delivery design
+Do not make email the primary Robin integration.
+
+Instead, build daily report delivery as a modular delivery system with these supported modes:
+
+save to database
+expose via API
+POST to webhook
+optional email fallback
+Environment variables
+Use:
+
+REPORT_SEND_TIME=20:00
+REPORT_DELIVERY_MODE=webhook
+ROBIN_REPORT_WEBHOOK_URL=
+GOOGLE_REVIEW_LINK=
+FEEDBACK_FORM_URL=
+Optional:
+
+REPORT_FALLBACK_EMAIL=
+RESEND_API_KEY=
+Delivery behavior
+At end of day:
+
+generate report
+save report to database
+save canonical JSON payload
+if delivery mode includes webhook, POST payload to configured webhook URL
+if delivery mode includes email fallback, send readable email summary
+store delivery result/status in report record
+Important
+Design this so that if webhook delivery is unavailable:
+
+report generation still succeeds
+failure is logged
+delivery status is marked failed
+report remains retrievable by API
+Phase 5 — Scheduling / automation
+Create a scheduled end-of-day report job.
+
+Requirements
+run at REPORT_SEND_TIME
+generate the day’s report
+store it
+deliver it via configured delivery modes
+log success/failure clearly
+Use a scheduler appropriate to the existing backend architecture.
+If none exists, node-cron is acceptable.
+
+Phase 6 — Owner dashboard
+Build backend support, and frontend only as needed, for these dashboard views.
+
+Owner dashboard
+Show:
+
+doors knocked today
+good conversations today
+quotes today
+closes today
+revenue sold today
+average ticket today
+bundles sold today
+jobs completed today
+cash collected today
+review requests sent today
+reviews received today
+unresolved issues
+tomorrow’s scheduled jobs
+Weekly dashboard
+Show:
+
+total sold this week
+total collected this week
+total completed this week
+close rate this week
+average ticket this week
+bundle rate this week
+canvasser leaderboard
+tech completion stats
+review growth
+unresolved issues count
+Priority note
+Backend accuracy matters more than visual polish.
+If time is limited:
+
+backend APIs first
+minimal owner dashboard second
+broader admin UI later
+Phase 7 — Prior customer review campaigns
+Support outreach to previously serviced customers.
+
+Requirements
+identify customers eligible for review campaign
+avoid customers who opted out
+create review workflow records for batch campaign
+send satisfaction request first
+route based on score just like normal completed jobs
+Start simple.
+This should be safe, auditable, and easy to control.
+
+Phase 8 — Reporting exports and Robin analysis support
+Support:
+
+JSON report retrieval
+CSV export
+date-range filtering
+filter by canvasser if practical
+filter by neighborhood if practical
+This is to make the app useful for owner review and Robin business analysis.
+
+Environment variables
+Use environment variables for anything configurable.
+Do not hardcode secrets or URLs.
+
+Suggested env vars:
+
+DATABASE_URL=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+REPORT_SEND_TIME=20:00
+REPORT_DELIVERY_MODE=webhook
+ROBIN_REPORT_WEBHOOK_URL=
+REPORT_FALLBACK_EMAIL=
+RESEND_API_KEY=
+GOOGLE_REVIEW_LINK=
+FEEDBACK_FORM_URL=
+REVIEW_DELIVERY_MODE=sms
+If the current app uses different config conventions, preserve them where reasonable.
+
+Testing requirements
+Test each major phase.
+
+Minimum acceptance tests:
+
+health endpoint works
+can create canvassing logs
+can create/update leads
+can convert lead to customer
+can create/update/complete jobs
+completing a job creates review workflow
+submitting satisfaction score 4–5 sends review link or logs intended send
+submitting satisfaction score 1–3 triggers feedback flow and issue flag
+daily report generation creates report record
+canonical Robin payload is stored
+webhook delivery is attempted when configured
+report retrieval API works
+dashboard endpoints aggregate correctly
+If test infrastructure already exists, use it.
+If not, create lightweight tests for critical service logic.
+
+Seed / sample data
+If the project supports seeding, create sample data for:
+
+3 users
+multiple canvassing logs
+several leads in different statuses
+customers
+jobs in multiple states
+at least one issue-flagged review workflow
+at least one daily report sample
+This should help validate dashboard and report logic.
+
+Definition of done
+The build is complete when:
+
+Existing app has been audited first
+Architecture summary is provided
+Existing structures are reused where reasonable
+Backend models for canvassing, leads, customers, jobs, reviews, content, and daily reports exist
+Completing a job triggers review workflow
+Satisfaction triage works correctly
+Daily report generation works
+Canonical Robin payload is saved
+Modular delivery supports database + API + webhook
+Daily scheduler is set up
+Dashboard data endpoints work
+Prior-customer review campaigns work in basic form
+Core flows are tested
+App is cleaner and more operational than before, not more complicated
+Final instruction to Replit Agent
+Before making large changes, first return:
+
+a concise audit of the current app
+the implementation plan in phases
+any architecture deviations you recommend based on what already exists
+Then proceed with implementation phase by phase.
+
+If you want, Boss, next I can also give you:
+
+a shorter version of this prompt for Replit if the long one is too much
+the exact Robin webhook JSON contract
+the review + feedback message copy for SMS/email templates

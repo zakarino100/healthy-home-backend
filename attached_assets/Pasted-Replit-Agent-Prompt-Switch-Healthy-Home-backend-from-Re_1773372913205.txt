@@ -1,0 +1,161 @@
+Replit Agent Prompt — Switch Healthy Home backend from Replit DB to Supabase
+I want to migrate the Healthy Home app/backend away from Replit DB and use Supabase/Postgres as the canonical backend database instead.
+
+This app is becoming a real operating system for Healthy Home, including:
+
+canvassing
+leads
+customers
+jobs
+review workflows
+technician workflows
+dashboards
+reporting
+sync between app surfaces
+Because of that, I do not want Replit DB as the primary persistence layer.
+
+Core requirement
+Make Supabase/Postgres the source of truth for all persistent business data.
+
+Replit DB should not remain the primary database.
+
+If local caching or temporary client-side storage is needed for UX/offline support, that is okay, but the canonical system of record must be Supabase.
+
+First step: audit the current project
+Before changing anything, inspect the current codebase and identify:
+
+where Replit DB is currently used
+what data models/entities are stored there
+what APIs/routes/services depend on it
+whether any local state is acting as hidden persistence
+how difficult migration will be
+what schema needs to exist in Supabase/Postgres
+Then provide:
+
+a concise migration plan
+what files/modules need to change
+what data model will look like in Supabase
+Do not rebuild the app from scratch.
+
+Goal
+Refactor the app so that:
+
+Supabase/Postgres stores all persistent business records
+existing app features continue to work
+backend routes/services read and write from Supabase-backed models
+the app is cleaner and more scalable afterward
+Data that should live in Supabase
+At minimum, all of these should be stored in Supabase/Postgres:
+
+users
+canvassing logs
+leads
+customers
+jobs
+review workflows
+job content / media metadata
+daily reports
+technician locations
+upsell flags
+follow-up flags
+any related notes/status history that matters operationally
+If anything is currently living in Replit DB that belongs in these business records, move it.
+
+Migration requirements
+1. Replace Replit DB as primary persistence
+Refactor any current Replit DB reads/writes so they use Supabase/Postgres instead.
+
+If the app already has some Supabase support, extend it cleanly.
+
+If the app uses Prisma with Postgres, keep that path if it fits the architecture.
+If not, use a clean Supabase/Postgres integration that matches the current stack.
+
+2. Preserve architecture where possible
+Do not unnecessarily rewrite working parts of the app.
+Prefer targeted refactoring.
+
+3. Keep a single source of truth
+After migration:
+
+Replit DB should no longer be the authoritative record for business data
+backend + app features should rely on Supabase
+4. Handle data migration if practical
+If existing data is stored in Replit DB:
+
+inspect what data exists
+migrate it into Supabase if feasible
+if full migration is not possible automatically, document what must be manually moved
+5. Keep IDs and relationships clean
+The migrated schema should preserve:
+
+lead/customer/job relationships
+technician/job relationships
+review workflow links
+report links
+timestamps/statuses
+Preferred architecture
+Use this mindset:
+
+Supabase/Postgres = canonical database
+Backend/API layer = app/business logic
+Frontend/Replit app = client/UI
+Replit runtime = hosting/dev environment only
+Do not treat Replit DB as a long-term business database.
+
+Auth and storage
+If the project already uses or plans to use Supabase features, align with that where practical:
+
+Supabase Postgres for relational data
+Supabase Auth if appropriate
+Supabase Storage for uploaded photos/media if appropriate
+But do not force unnecessary auth rewrites if the current app has a working approach.
+Inspect first and preserve what makes sense.
+
+What I want you to do
+Audit current Replit DB usage
+Identify all persistence points that should move to Supabase
+Propose the migration/refactor plan
+Implement the schema and integration changes
+Refactor backend/services/routes to use Supabase/Postgres
+Remove or deprecate Replit DB as primary persistence
+Document any remaining Replit DB usage, if any, and justify it
+Provide setup instructions for required Supabase environment variables
+Provide migration notes and test steps
+Environment/config expectations
+Support environment variables such as:
+
+DATABASE_URL=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+If Prisma is used, configure it correctly for Supabase Postgres.
+
+If direct Supabase queries are used, keep the implementation clean and organized.
+
+Important design rules
+Do not rebuild the app from scratch
+Do not keep Replit DB as the primary business datastore
+Do not duplicate persistent business records across both systems unnecessarily
+Do not create confusing dual-write logic unless there is a temporary migration phase
+Keep the database architecture clean and scalable
+Preserve existing business logic where possible while upgrading persistence
+Definition of done
+The migration is complete when:
+
+Replit DB is no longer the primary persistence layer
+Supabase/Postgres stores the core Healthy Home business records
+Existing key workflows still function
+backend routes/services use Supabase-backed persistence
+data relationships remain intact
+setup instructions for Supabase are documented
+any remaining Replit DB usage is minimal and explicitly justified
+the app is in a better long-term state architecturally
+Final instruction
+Before making major changes, first return:
+
+a concise audit of current Replit DB usage
+the proposed migration plan
+the target Supabase/Postgres architecture
+the implementation phases
+Then proceed phase by phase.
+

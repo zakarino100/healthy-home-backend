@@ -1,0 +1,14 @@
+packages:
+  "recharts": "Required for dashboard charts and data visualization"
+  "date-fns": "Required for robust date formatting and manipulation"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes without style conflicts"
+
+images:
+  - path: "artifacts/dashboard/public/images/hero-pattern.png"
+    description: "Abstract organic wave pattern in very subtle, soft mint green and white, suitable for a clean background texture"
+    aspect_ratio: "16:9"
+
+notes:
+  - Using generated hooks from @workspace/api-client-react
+  - Assuming lucide-react is already installed as part of the base stack

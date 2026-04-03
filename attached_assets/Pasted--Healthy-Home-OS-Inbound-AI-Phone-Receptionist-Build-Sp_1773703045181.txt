@@ -1,0 +1,345 @@
+# Healthy Home OS — Inbound AI Phone Receptionist Build Spec
+**Version:** 1.1 (patched per Robin review)
+**Target:** Replit Agent (Healthy Home Backend project)  
+**Depends on:** Healthy Home OS backend (base spec) must be complete and running  
+**Architecture approved by:** Robin
+
+---
+
+## READ THIS FIRST — Instructions for Replit Agent
+
+You are adding an inbound AI phone receptionist to the existing Healthy Home backend. This feature must be as self-contained as possible. Only touch existing files where explicitly required by this spec.
+
+The receptionist will:
+1. Answer inbound calls with an ElevenLabs voice
+2. Greet the caller and capture the reason for their call
+3. Warm-transfer the call to the owner with a whispered summary before connecting
+4. Log every call to the database
+
+**Build in the order listed. Do not skip phases.**
+
+---
+
+## Safety / Data Protection Rules
+
+- Do not delete, drop, or recreate any existing tables, models, or routes
+- Do not modify any existing backend files except `server.js` (one new import line only) and `prisma/schema.prisma` (one new model only)
+- Frontend changes are limited to adding the new call log page and the minimum routing/navigation needed to access it
+- Do not break any existing leads, jobs, customers, canvassing, or scheduling behavior
+- All schema changes must be additive — one new model only, no field changes to existing models
+- This feature must be logically isolated so it can be disabled by removing/unregistering the phone routes and related UI without affecting any other Healthy Home functionality. Database artifacts such as the additive `CallLog` table may remain.
+- Do not overbuild — this is a receptionist, not a booking agent or CRM assistant
+
+---
+
+## Build Phase 0 — Read Vapi Docs Before Writing Any Code
+
+**This phase is mandatory. Do not skip it.**
+
+Before writing any webhook handlers or assistant config responses, fetch and read the current Vapi documentation at `https://docs.vapi.ai` to confirm:
+
+1. The exact webhook event name Vapi sends when an inbound call needs an assistant (may be `assistant-request` or similar — confirm actual name)
+2. The exact webhook event name(s) Vapi sends when a call reaches its final state (may be `call.ended`, `end-of-call-report`, or similar — confirm actual name and which event carries transcript + summary)
+3. The exact shape of the final call webhook payload — specifically confirm field paths for:
+   - caller phone number
+   - call start time
+   - call end time
+   - transcript
+   - AI-generated summary (if available natively)
+   - transfer/end reason
+   - Vapi's internal call ID
+4. The exact format of the assistant configuration response that Vapi expects from an `assistant-request` webhook
+5. The exact format of the `transferCall` tool definition, including warm transfer with summary mode
+6. How Vapi webhook signature verification works (header name, HMAC method, secret usage)
+
+Write a comment block at the top of `src/routes/phone.js` before any code:
+
+```js
+/*
+ * VAPI DOCS AUDIT — [date]
+ * Inbound webhook event name: [confirmed value]
+ * Final call event name (carries transcript + summary): [confirmed value]
+ * Caller phone field path: [confirmed — e.g. message.call.customer.number]
+ * Transcript field path: [confirmed]
+ * Summary field path: [confirmed or "not natively available"]
+ * Transfer/end reason field path: [confirmed]
+ * Vapi call ID field path: [confirmed]
+ * Assistant config response format: [confirmed]
+ * transferCall warm-transfer-with-summary format: [confirmed]
+ * Webhook signature: header=[confirmed], method=[confirmed]
+ */
+```
+
+Do not begin Phase 1 until this comment block exists with real confirmed values from current docs.
+
+---
+
+## Build Phase 1 — Schema Change
+
+**File:** `prisma/schema.prisma`
+
+Add this single new model. Do not modify any existing models.
+
+```prisma
+model CallLog {
+  id               String    @id @default(uuid())
+  providerCallId   String?   @unique  // Vapi's internal call ID — used as idempotency key
+  callerPhone      String?
+  startedAt        DateTime?
+  endedAt          DateTime?
+  durationSeconds  Int?
+  transcript       String?   // full conversation transcript from Vapi
+  summary          String?   // AI-generated summary of reason for call
+  category         String?   // optional — may remain null in MVP
+  transferStatus   String?   // "transferred" | "no_answer" | "voicemail" | "not_attempted"
+  answeredByOwner  Boolean   @default(false)
+  rawPayload       Json?     // full Vapi webhook payload — stored for debugging
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+```
+
+After adding the model:
+1. Run `npx prisma migrate dev --name add_call_log`
+2. Run `npx prisma generate`
+3. Confirm no errors before continuing
+
+---
+
+## Build Phase 2 — Environment Variables
+
+Add to `.env`:
+
+```
+VAPI_API_KEY=
+VAPI_WEBHOOK_SECRET=
+ELEVENLABS_VOICE_ID=
+OWNER_PHONE=+13154470614
+```
+
+Notes:
+- `VAPI_PHONE_NUMBER_ID` is only needed for Vapi dashboard setup (Phase 5), not for backend runtime code. Store it in `.env` as an operational reference but do not reference it in application code unless the confirmed Vapi API flow requires it.
+- None of the above values should be hardcoded anywhere in code. All must be read from `process.env`.
+
+---
+
+## Build Phase 3 — Vapi Service Module
+
+**File:** `src/services/vapiService.js`
+
+This module contains two things only. Do not add anything else to it.
+
+### 3A. Webhook signature verification
+
+Using the method confirmed in Phase 0:
+
+```js
+// verifyVapiWebhook(req)
+// - Reads signature from the header confirmed in Phase 0 audit
+// - Compares against HMAC of raw request body using VAPI_WEBHOOK_SECRET
+// - Returns true if valid, false if invalid
+//
+// Secret missing behavior:
+// - If NODE_ENV !== 'production' and VAPI_WEBHOOK_SECRET is not set:
+//     log a warning and return true (dev bypass)
+// - If NODE_ENV === 'production' and VAPI_WEBHOOK_SECRET is not set:
+//     log an error and return false (reject the request)
+```
+
+### 3B. Assistant config builder
+
+```js
+// buildAssistantConfig()
+// - Returns the full assistant configuration object in the format confirmed in Phase 0
+// - Reads ELEVENLABS_VOICE_ID and OWNER_PHONE from process.env
+// - System prompt (use this exact text):
+//   "You are a friendly phone receptionist for Healthy Home, an exterior cleaning
+//    company. Greet the caller warmly. Ask how you can help. Listen to their reason
+//    for calling. Do not answer detailed pricing questions. Do not make promises or
+//    commitments. Do not schedule appointments. Keep the conversation brief. Once
+//    you understand the reason for the call, transfer immediately using the
+//    transferCall function."
+// - First message: "Thank you for calling Healthy Home. How can I help you today?"
+// - Voice provider: ElevenLabs, voiceId: ELEVENLABS_VOICE_ID from env
+// - Transfer: warm transfer with summary to OWNER_PHONE
+//   Use the exact transferCall tool format confirmed in Phase 0 audit
+```
+
+---
+
+## Build Phase 4 — Phone Routes
+
+**File:** `src/routes/phone.js`
+
+Register in `server.js` by adding exactly ONE line in the imports and ONE line in the routes:
+```js
+import phoneRoutes from './routes/phone.js'
+app.use('/api/phone', phoneRoutes)
+```
+
+Do not change anything else in `server.js`.
+
+---
+
+### 4A. `POST /api/phone/webhook`
+
+This is the single endpoint that receives all Vapi webhook events.
+
+```js
+// 1. To preserve raw body for HMAC verification, ensure this route uses
+//    express.raw() or equivalent before express.json() parses the body.
+//    Confirm the correct approach for your Express version.
+
+// 2. Verify webhook signature using vapiService.verifyVapiWebhook(req)
+//    If verification fails: return 401 immediately, do not process further
+
+// 3. Parse event type from payload using field name confirmed in Phase 0
+
+// 4. Route by event type:
+//    - assistant-request event (confirmed name): return buildAssistantConfig() response
+//    - final call event (confirmed name from Phase 0 — may differ from "call-ended"):
+//        call handleCallEnded(payload)
+//    - all other event types: return 200 { received: true } — do not error
+```
+
+### 4B. `handleCallEnded(payload)` — internal async function in phone.js
+
+```js
+// Extract fields from payload using paths confirmed in Phase 0 audit.
+// Do not assume field names — use only confirmed paths.
+//
+// Fields to extract:
+// - providerCallId
+// - callerPhone
+// - startedAt, endedAt
+// - transcript
+// - summary (use Vapi's native summary if available; otherwise null — do not generate)
+// - transferStatus: map Vapi's end/transfer reason to one of:
+//     "transferred" | "no_answer" | "voicemail" | "not_attempted"
+// - answeredByOwner: true only if transfer completed and was answered
+//
+// Calculate durationSeconds = (endedAt - startedAt) in seconds, if both exist
+//
+// Store complete raw payload in rawPayload field
+//
+// IDEMPOTENCY — use upsert, not create:
+//   prisma.callLog.upsert({
+//     where: { providerCallId: extractedProviderCallId },
+//     update: { /* all extracted fields */ },
+//     create: { /* all extracted fields */ }
+//   })
+// This ensures repeated webhook deliveries update the existing record
+// instead of throwing a unique constraint error or creating duplicates.
+//
+// If providerCallId is null/missing from the payload, fall back to create()
+// and log a warning.
+//
+// If the prisma write fails for any reason:
+//   - log the error with full detail
+//   - still return 200 to Vapi
+//   - do not throw — a DB error must never cause Vapi to retry in a loop
+```
+
+### 4C. `GET /api/phone/calls`
+
+Admin endpoint — list call logs.
+
+- Support `?date=YYYY-MM-DD` filter (match on `createdAt` date)
+- Support `?transferStatus=` filter
+- Default sort: `createdAt DESC`
+- Return all CallLog fields except `rawPayload` (too large for list view)
+- Return 20 records per page, support `?page=` param
+
+### 4D. `GET /api/phone/calls/:id`
+
+Admin endpoint — single call log detail.
+
+- Return all fields including `rawPayload`
+- Return 404 if not found
+
+---
+
+## Build Phase 5 — Vapi Dashboard Configuration
+
+These steps happen in the Vapi dashboard, not in code. Complete them in order before testing.
+
+1. Log in to Vapi dashboard
+2. Go to Integrations → add ElevenLabs API key, confirm voice library syncs
+3. Go to Phone Numbers → purchase or import a phone number
+4. Set the inbound webhook URL for that number to: `https://[your-replit-public-url]/api/phone/webhook`
+5. Copy the webhook secret and add it to `.env` as `VAPI_WEBHOOK_SECRET`
+6. Set the assistant trigger mode to dynamic config (backend returns config on `assistant-request`)
+
+**The Replit URL must be the public HTTPS URL, not `localhost`. Vapi cannot reach `localhost`.**
+
+---
+
+## Build Phase 6 — Admin UI
+
+Add a call log page to the existing React frontend.
+
+**File:** `client/src/pages/CallLog.jsx`
+
+Changes to existing files:
+- Add route `/calls` in `App.jsx`
+- Add a navigation link to `/calls` using the same nav pattern already used in the app (sidebar link, menu item, or however existing pages are accessed) — inspect the existing nav structure and match it
+
+Display:
+- Table of call log records sorted newest first
+- Columns: date/time, caller phone, duration, summary, transfer status
+- Clicking a row expands inline to show full transcript
+- Refresh button
+- Filter by date and transfer status
+
+Keep styling consistent with existing admin pages. No new libraries.
+
+---
+
+## Definition of Done
+
+- [ ] Phase 0 audit comment exists at top of `phone.js` with all fields confirmed from live Vapi docs
+- [ ] `CallLog` model migrated cleanly — no existing tables touched
+- [ ] All 4 required env vars present in `.env` with comments
+- [ ] `verifyVapiWebhook` returns 401 on invalid or missing signature in production
+- [ ] `verifyVapiWebhook` allows bypass only when `NODE_ENV !== 'production'` and secret is missing
+- [ ] `POST /api/phone/webhook` handles assistant-request event and returns valid config JSON
+- [ ] ElevenLabs voice ID is read from env — not hardcoded
+- [ ] Owner phone is read from env — not hardcoded
+- [ ] Warm transfer with summary uses exact format confirmed in Phase 0
+- [ ] `POST /api/phone/webhook` handles final call event and writes CallLog record
+- [ ] Call log write uses upsert with `providerCallId` as idempotency key
+- [ ] DB write failure returns 200 to Vapi — does not throw or retry
+- [ ] Unknown event types return 200 — do not error
+- [ ] `GET /api/phone/calls` returns paginated list without `rawPayload`
+- [ ] `GET /api/phone/calls/:id` returns full record with `rawPayload`
+- [ ] Call log page renders in admin frontend with correct nav link
+- [ ] No existing backend routes, models, or behavior changed
+- [ ] `server.js` has exactly one new import and one new `app.use()` line — nothing else changed
+
+---
+
+## Failure Handling — If Owner Doesn't Answer
+
+For v1, keep this simple. Include this instruction in the assistant system prompt:
+
+> "If your transferCall attempt fails or is not answered, say: 'I wasn't able to reach anyone right now. Please try calling back or send us a text and we'll get back to you shortly.' Then end the call politely."
+
+Log the call with `transferStatus = "no_answer"`.
+
+Do not build callback capture in v1. That is out of scope for this spec and must not be built now.
+
+---
+
+## Things Replit Agent Must NOT Do
+
+- Do not write any webhook handler code before completing the Phase 0 docs audit
+- Do not assume Vapi field names or event names — use only confirmed values from docs
+- Do not hardcode ElevenLabs voice ID, owner phone, or webhook secret
+- Do not use `prisma.callLog.create()` for call-ended events — use upsert with `providerCallId`
+- Do not let a DB failure cause a non-200 response to Vapi — that triggers retry loops
+- Do not reject webhooks in production if VAPI_WEBHOOK_SECRET is missing — reject them
+- Do not bypass signature verification in production under any condition
+- Do not modify any existing backend files except `server.js` (two lines) and `schema.prisma` (one model)
+- Do not add frontend libraries or rebuild existing pages
+- Do not build callback capture, appointment booking, CRM lookup, or category classification in v1
+- Do not hardcode `VAPI_PHONE_NUMBER_ID` into runtime code unless confirmed necessary by Vapi docs

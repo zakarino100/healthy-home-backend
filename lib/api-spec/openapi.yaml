@@ -1,0 +1,1939 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.2.0
+  description: Healthy Home Operating System API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: users
+    description: Team member management
+  - name: canvassing
+    description: Canvassing session tracking
+  - name: leads
+    description: Lead management
+  - name: customers
+    description: Customer management
+  - name: jobs
+    description: Job management
+  - name: reviews
+    description: Review and satisfaction workflow
+  - name: content
+    description: Job content capture
+  - name: dashboard
+    description: Dashboard metrics
+  - name: reports
+    description: Daily reports
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List team members
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, canvasser, technician]
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Deactivate a team member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /canvassing/sessions:
+    get:
+      operationId: listCanvassingSessions
+      tags: [canvassing]
+      summary: List canvassing sessions
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: canvasser
+          in: query
+          schema:
+            type: string
+        - name: neighborhood
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of canvassing sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CanvassingSession"
+    post:
+      operationId: createCanvassingSession
+      tags: [canvassing]
+      summary: Create a canvassing session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCanvassingSession"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvassingSession"
+
+  /canvassing/sessions/{id}:
+    get:
+      operationId: getCanvassingSession
+      tags: [canvassing]
+      summary: Get a canvassing session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Canvassing session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvassingSession"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateCanvassingSession
+      tags: [canvassing]
+      summary: Update a canvassing session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCanvassingSession"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvassingSession"
+    delete:
+      operationId: deleteCanvassingSession
+      tags: [canvassing]
+      summary: Delete a canvassing session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /canvassing/leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      summary: List leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [new, quoted, follow_up, sold, lost]
+        - name: canvasser
+          in: query
+          schema:
+            type: string
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLead"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /canvassing/leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLead"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /canvassing/leads/{id}/convert:
+    post:
+      operationId: convertLeadToCustomer
+      tags: [leads]
+      summary: Convert a sold lead into a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Customer created from lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          description: Lead not eligible for conversion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomer"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomer"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List jobs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, completed, rescheduled, canceled]
+        - name: technician
+          in: query
+          schema:
+            type: string
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+    post:
+      operationId: createJob
+      tags: [jobs]
+      summary: Create a job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJob"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Get a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateJob
+      tags: [jobs]
+      summary: Update a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJob"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /jobs/{id}/complete:
+    post:
+      operationId: completeJob
+      tags: [jobs]
+      summary: Mark job as completed and trigger review workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job completed and review workflow triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobCompleteResponse"
+
+  /reviews:
+    get:
+      operationId: listReviewWorkflows
+      tags: [reviews]
+      summary: List review workflows
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: isIssueFlagged
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of review workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReviewWorkflow"
+
+  /reviews/{id}/satisfaction:
+    post:
+      operationId: recordSatisfaction
+      tags: [reviews]
+      summary: Record satisfaction score and route appropriately
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SatisfactionInput"
+      responses:
+        "200":
+          description: Satisfaction recorded and routed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewWorkflow"
+
+  /reviews/{id}/resolve-issue:
+    post:
+      operationId: resolveIssue
+      tags: [reviews]
+      summary: Resolve a flagged customer issue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveIssueInput"
+      responses:
+        "200":
+          description: Issue resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewWorkflow"
+
+  /reviews/campaign/batch:
+    post:
+      operationId: launchReviewCampaign
+      tags: [reviews]
+      summary: Launch review campaign for old customers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewCampaignInput"
+      responses:
+        "200":
+          description: Campaign launched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewCampaignResult"
+
+  /content/{jobId}:
+    get:
+      operationId: getJobContent
+      tags: [content]
+      summary: Get content record for a job
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobContent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateJobContent
+      tags: [content]
+      summary: Update content capture for a job
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateJobContent"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobContent"
+
+  /dashboard/today:
+    get:
+      operationId: getDashboardToday
+      tags: [dashboard]
+      summary: Get today's KPI metrics
+      responses:
+        "200":
+          description: Today's dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardToday"
+
+  /dashboard/weekly:
+    get:
+      operationId: getDashboardWeekly
+      tags: [dashboard]
+      summary: Get this week's metrics
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Weekly dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardWeekly"
+
+  /reports/daily:
+    get:
+      operationId: listDailyReports
+      tags: [reports]
+      summary: List daily reports
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of daily reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyReport"
+
+  /reports/daily/generate:
+    post:
+      operationId: generateDailyReport
+      tags: [reports]
+      summary: Generate and save the daily report for a given date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateReportInput"
+      responses:
+        "200":
+          description: Generated daily report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobinPayload"
+
+  /reports/daily/{date}/export:
+    get:
+      operationId: exportDailyReport
+      tags: [reports]
+      summary: Export daily report as JSON or CSV
+      parameters:
+        - name: date
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        "200":
+          description: Report payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RobinPayload"
+            text/csv:
+              schema:
+                type: string
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, canvasser, technician]
+        active:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - role
+        - active
+        - createdAt
+        - updatedAt
+
+    CreateUser:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, canvasser, technician]
+        active:
+          type: boolean
+      required:
+        - name
+        - role
+
+    CanvassingSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        canvasser:
+          type: string
+        sessionDate:
+          type: string
+        neighborhood:
+          type: string
+          nullable: true
+        route:
+          type: string
+          nullable: true
+        doorsKnocked:
+          type: integer
+        peopleReached:
+          type: integer
+        goodConversations:
+          type: integer
+        quotesGiven:
+          type: integer
+        closes:
+          type: integer
+        revenueSold:
+          type: string
+        averageTicket:
+          type: string
+          nullable: true
+        bundleCount:
+          type: integer
+        driveawayAddOnCount:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - canvasser
+        - sessionDate
+        - doorsKnocked
+        - peopleReached
+        - goodConversations
+        - quotesGiven
+        - closes
+        - revenueSold
+        - bundleCount
+        - driveawayAddOnCount
+        - createdAt
+        - updatedAt
+
+    CreateCanvassingSession:
+      type: object
+      properties:
+        canvasser:
+          type: string
+        sessionDate:
+          type: string
+        neighborhood:
+          type: string
+          nullable: true
+        route:
+          type: string
+          nullable: true
+        doorsKnocked:
+          type: integer
+        peopleReached:
+          type: integer
+        goodConversations:
+          type: integer
+        quotesGiven:
+          type: integer
+        closes:
+          type: integer
+        revenueSold:
+          type: string
+        averageTicket:
+          type: string
+          nullable: true
+        bundleCount:
+          type: integer
+        driveawayAddOnCount:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+      required:
+        - canvasser
+        - sessionDate
+        - doorsKnocked
+        - peopleReached
+        - goodConversations
+        - quotesGiven
+        - closes
+        - revenueSold
+        - bundleCount
+        - driveawayAddOnCount
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        businessUnit:
+          type: string
+          nullable: true
+        canvasser:
+          type: string
+          nullable: true
+        serviceInterest:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [new, quoted, follow_up, sold, lost]
+        followUpDate:
+          type: string
+          nullable: true
+        doNotKnock:
+          type: boolean
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateLead:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        canvasser:
+          type: string
+          nullable: true
+        serviceInterest:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [new, quoted, follow_up, sold, lost]
+        followUpDate:
+          type: string
+          nullable: true
+        doNotKnock:
+          type: boolean
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - firstName
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        optOut:
+          type: boolean
+        reviewCampaignEligible:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - firstName
+        - lastName
+        - optOut
+        - reviewCampaignEligible
+        - createdAt
+        - updatedAt
+
+    CreateCustomer:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zip:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        optOut:
+          type: boolean
+        reviewCampaignEligible:
+          type: boolean
+      required:
+        - firstName
+        - lastName
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        serviceType:
+          type: string
+          enum: [house_wash, driveway_cleaning, bundle, other]
+        packageType:
+          type: string
+          nullable: true
+        quotedPrice:
+          type: string
+          nullable: true
+        soldPrice:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [scheduled, completed, rescheduled, canceled]
+        scheduledAt:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          nullable: true
+        technicianAssigned:
+          type: string
+          nullable: true
+        paymentStatus:
+          type: string
+          enum: [pending, collected, invoiced, waived]
+        paymentAmountCollected:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        satisfactionWorkflowTriggered:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - customerId
+        - serviceType
+        - status
+        - paymentStatus
+        - satisfactionWorkflowTriggered
+        - createdAt
+        - updatedAt
+
+    CreateJob:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        serviceType:
+          type: string
+          enum: [house_wash, driveway_cleaning, bundle, other]
+        packageType:
+          type: string
+          nullable: true
+        quotedPrice:
+          type: string
+          nullable: true
+        soldPrice:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [scheduled, completed, rescheduled, canceled]
+        scheduledAt:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          nullable: true
+        technicianAssigned:
+          type: string
+          nullable: true
+        paymentStatus:
+          type: string
+          enum: [pending, collected, invoiced, waived]
+        paymentAmountCollected:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+        - serviceType
+
+    JobCompleteResponse:
+      type: object
+      properties:
+        job:
+          $ref: "#/components/schemas/Job"
+        reviewWorkflow:
+          $ref: "#/components/schemas/ReviewWorkflow"
+      required:
+        - job
+        - reviewWorkflow
+
+    ReviewWorkflow:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobId:
+          type: integer
+        customerId:
+          type: integer
+        status:
+          type: string
+        satisfactionScore:
+          type: integer
+          nullable: true
+        satisfactionResponseAt:
+          type: string
+          nullable: true
+        satisfactionSentAt:
+          type: string
+          nullable: true
+        reviewRequestSentAt:
+          type: string
+          nullable: true
+        reviewReminderSentAt:
+          type: string
+          nullable: true
+        reviewCompletedAt:
+          type: string
+          nullable: true
+        feedbackFormSentAt:
+          type: string
+          nullable: true
+        feedbackReceivedAt:
+          type: string
+          nullable: true
+        isIssueFlagged:
+          type: boolean
+        internalIssueNotes:
+          type: string
+          nullable: true
+        isOldCustomerCampaign:
+          type: boolean
+        deliveryChannel:
+          type: string
+          enum: [sms, email, manual, unknown]
+        deliveryStatus:
+          type: string
+          enum: [pending, sent, failed, skipped]
+        deliveryLog:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - jobId
+        - customerId
+        - status
+        - isIssueFlagged
+        - isOldCustomerCampaign
+        - deliveryChannel
+        - deliveryStatus
+        - createdAt
+        - updatedAt
+
+    SatisfactionInput:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 1
+          maximum: 5
+      required:
+        - score
+
+    ResolveIssueInput:
+      type: object
+      properties:
+        notes:
+          type: string
+      required:
+        - notes
+
+    ReviewCampaignInput:
+      type: object
+      properties:
+        customerIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - customerIds
+
+    ReviewCampaignResult:
+      type: object
+      properties:
+        queued:
+          type: integer
+        skipped:
+          type: integer
+        workflowIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - queued
+        - skipped
+        - workflowIds
+
+    JobContent:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobId:
+          type: integer
+        beforePhotos:
+          type: array
+          items:
+            type: string
+          nullable: true
+        afterPhotos:
+          type: array
+          items:
+            type: string
+          nullable: true
+        videoCapture:
+          type: boolean
+        contentReady:
+          type: boolean
+        reviewScreenshot:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - jobId
+        - videoCapture
+        - contentReady
+        - reviewScreenshot
+        - createdAt
+        - updatedAt
+
+    UpdateJobContent:
+      type: object
+      properties:
+        beforePhotos:
+          type: array
+          items:
+            type: string
+          nullable: true
+        afterPhotos:
+          type: array
+          items:
+            type: string
+          nullable: true
+        videoCapture:
+          type: boolean
+        contentReady:
+          type: boolean
+        reviewScreenshot:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+
+    DashboardToday:
+      type: object
+      properties:
+        date:
+          type: string
+        doorsKnocked:
+          type: integer
+        goodConversations:
+          type: integer
+        quotesGiven:
+          type: integer
+        closes:
+          type: integer
+        closeRate:
+          type: number
+        revenueSold:
+          type: number
+        averageTicket:
+          type: number
+        bundleCount:
+          type: integer
+        jobsCompleted:
+          type: integer
+        cashCollected:
+          type: number
+        reviewRequestsSent:
+          type: integer
+        reviewsReceived:
+          type: integer
+        unresolvedIssues:
+          type: integer
+        tomorrowScheduledJobs:
+          type: integer
+        kpiTargets:
+          $ref: "#/components/schemas/KpiTargets"
+      required:
+        - date
+        - doorsKnocked
+        - goodConversations
+        - quotesGiven
+        - closes
+        - closeRate
+        - revenueSold
+        - averageTicket
+        - bundleCount
+        - jobsCompleted
+        - cashCollected
+        - reviewRequestsSent
+        - reviewsReceived
+        - unresolvedIssues
+        - tomorrowScheduledJobs
+        - kpiTargets
+
+    KpiTargets:
+      type: object
+      properties:
+        goodConversations:
+          type: integer
+        closes:
+          type: integer
+        revenueSold:
+          type: number
+        bundles:
+          type: integer
+      required:
+        - goodConversations
+        - closes
+        - revenueSold
+        - bundles
+
+    DashboardWeekly:
+      type: object
+      properties:
+        startDate:
+          type: string
+        endDate:
+          type: string
+        totalSold:
+          type: number
+        totalCollected:
+          type: number
+        totalCompleted:
+          type: integer
+        closeRate:
+          type: number
+        averageTicket:
+          type: number
+        bundleRate:
+          type: number
+        canvasserLeaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        techCompletionStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/TechStat"
+        reviewGrowth:
+          type: integer
+        unresolvedIssues:
+          type: integer
+      required:
+        - startDate
+        - endDate
+        - totalSold
+        - totalCollected
+        - totalCompleted
+        - closeRate
+        - averageTicket
+        - bundleRate
+        - canvasserLeaderboard
+        - techCompletionStats
+        - reviewGrowth
+        - unresolvedIssues
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        canvasser:
+          type: string
+        closes:
+          type: integer
+        revenueSold:
+          type: number
+        goodConversations:
+          type: integer
+        closeRate:
+          type: number
+      required:
+        - canvasser
+        - closes
+        - revenueSold
+        - goodConversations
+        - closeRate
+
+    TechStat:
+      type: object
+      properties:
+        technician:
+          type: string
+        jobsCompleted:
+          type: integer
+        cashCollected:
+          type: number
+      required:
+        - technician
+        - jobsCompleted
+        - cashCollected
+
+    DailyReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        reportDate:
+          type: string
+        doorsKnocked:
+          type: integer
+        goodConversations:
+          type: integer
+        quotesGiven:
+          type: integer
+        closes:
+          type: integer
+        closeRate:
+          type: string
+          nullable: true
+        revenueSold:
+          type: string
+        averageTicket:
+          type: string
+          nullable: true
+        bundlesSold:
+          type: integer
+        jobsCompleted:
+          type: integer
+        cashCollected:
+          type: string
+        reviewRequestsSent:
+          type: integer
+        positiveSatisfactionResponses:
+          type: integer
+        negativeSatisfactionResponses:
+          type: integer
+        reviewsReceived:
+          type: integer
+        topCanvasser:
+          type: string
+          nullable: true
+        topTechnician:
+          type: string
+          nullable: true
+        openIssuesCount:
+          type: integer
+        anomaliesNotes:
+          type: string
+          nullable: true
+        webhookSent:
+          type: boolean
+        webhookSentAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - reportDate
+        - doorsKnocked
+        - goodConversations
+        - quotesGiven
+        - closes
+        - revenueSold
+        - bundlesSold
+        - jobsCompleted
+        - cashCollected
+        - reviewRequestsSent
+        - positiveSatisfactionResponses
+        - negativeSatisfactionResponses
+        - reviewsReceived
+        - openIssuesCount
+        - webhookSent
+        - createdAt
+
+    GenerateReportInput:
+      type: object
+      properties:
+        date:
+          type: string
+        webhookUrl:
+          type: string
+          nullable: true
+      required:
+        - date
+
+    RobinPayload:
+      type: object
+      properties:
+        business_name:
+          type: string
+        report_date:
+          type: string
+        sales_metrics:
+          type: object
+          properties:
+            doors_knocked:
+              type: integer
+            good_conversations:
+              type: integer
+            quotes_given:
+              type: integer
+            closes:
+              type: integer
+            close_rate_pct:
+              type: number
+            revenue_sold:
+              type: number
+            average_ticket:
+              type: number
+            bundles_sold:
+              type: integer
+          required:
+            - doors_knocked
+            - good_conversations
+            - quotes_given
+            - closes
+            - close_rate_pct
+            - revenue_sold
+            - average_ticket
+            - bundles_sold
+        fulfillment_metrics:
+          type: object
+          properties:
+            jobs_completed:
+              type: integer
+            cash_collected:
+              type: number
+            jobs_scheduled_tomorrow:
+              type: integer
+          required:
+            - jobs_completed
+            - cash_collected
+            - jobs_scheduled_tomorrow
+        review_metrics:
+          type: object
+          properties:
+            satisfaction_requests_sent:
+              type: integer
+            positive_responses:
+              type: integer
+            negative_responses:
+              type: integer
+            reviews_received:
+              type: integer
+          required:
+            - satisfaction_requests_sent
+            - positive_responses
+            - negative_responses
+            - reviews_received
+        team_metrics:
+          type: object
+          properties:
+            top_canvasser:
+              type: string
+              nullable: true
+            top_technician:
+              type: string
+              nullable: true
+            canvasser_count_active_today:
+              type: integer
+          required:
+            - top_canvasser
+            - top_technician
+            - canvasser_count_active_today
+        open_issues:
+          type: object
+          properties:
+            count:
+              type: integer
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  workflowId:
+                    type: integer
+                  customerId:
+                    type: integer
+                  jobId:
+                    type: integer
+                  notes:
+                    type: string
+                    nullable: true
+                required:
+                  - workflowId
+                  - customerId
+                  - jobId
+          required:
+            - count
+            - details
+        next_day_schedule:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id:
+                type: integer
+              customer_name:
+                type: string
+              service_type:
+                type: string
+              scheduled_at:
+                type: string
+              technician:
+                type: string
+                nullable: true
+            required:
+              - job_id
+              - customer_name
+              - service_type
+              - scheduled_at
+        daily_targets:
+          type: object
+          properties:
+            good_conversations:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            closes:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            revenue_sold:
+              type: object
+              properties:
+                goal:
+                  type: number
+                actual:
+                  type: number
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+            bundles:
+              type: object
+              properties:
+                goal:
+                  type: integer
+                actual:
+                  type: integer
+                met:
+                  type: boolean
+              required: [goal, actual, met]
+          required:
+            - good_conversations
+            - closes
+            - revenue_sold
+            - bundles
+        anomaly_notes:
+          type: string
+          nullable: true
+      required:
+        - business_name
+        - report_date
+        - sales_metrics
+        - fulfillment_metrics
+        - review_metrics
+        - team_metrics
+        - open_issues
+        - next_day_schedule
+        - daily_targets
