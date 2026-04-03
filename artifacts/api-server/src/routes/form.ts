@@ -13,6 +13,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { leadsTable, leadDetailsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { notifyNewLead, scheduleFollowUpReminders } from "../services/scout.js";
 
 const router: IRouter = Router();
 
@@ -131,6 +132,35 @@ router.post("/submit", requireFormToken, async (req, res) => {
         updatedBy: "web_form",
       }).onConflictDoNothing();
     }
+
+    // ── Scout Discord notification ──────────────────────────────────────────
+    notifyNewLead({
+      id: lead.id,
+      name: homeownerName,
+      phone,
+      email,
+      address,
+      city,
+      state,
+      zip,
+      services,
+      source: FORM_SOURCE,
+      notes: fullNotes,
+    }).then((threadId) => {
+      if (threadId) {
+        scheduleFollowUpReminders(
+          threadId,
+          homeownerName,
+          async () => {
+            const rows = await db.select({ status: leadsTable.status })
+              .from(leadsTable)
+              .where(eq(leadsTable.id, lead.id))
+              .limit(1);
+            return rows[0]?.status ?? null;
+          },
+        );
+      }
+    }).catch((err) => console.error("[scout] Notification error:", err));
 
     // ── Response ─────────────────────────────────────────────────────────────
     return res.status(201).json({

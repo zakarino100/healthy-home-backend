@@ -22,6 +22,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, or } from "drizzle-orm";
 import { sendMetaEvent } from "../services/meta-capi.js";
+import { notifyNewLead, scheduleFollowUpReminders } from "../services/scout.js";
 
 const router = Router();
 
@@ -248,6 +249,35 @@ router.post("/webhook", async (req: Request, res: Response) => {
         setImmediate(() =>
           sendMetaEvent(leadId, "new", { email, phone, city, state, zip, homeownerName: fullName }).catch(console.error)
         );
+
+        // Scout Discord notification
+        notifyNewLead({
+          id: leadId,
+          name: fullName || `${firstName} ${lastName}`.trim() || null,
+          phone: phone || null,
+          email: email || null,
+          address: address || null,
+          city: city || null,
+          state: state || null,
+          zip: zip || null,
+          services: service ? [service] : null,
+          source: FB_SOURCE,
+          notes: message || null,
+        }).then((threadId) => {
+          if (threadId) {
+            scheduleFollowUpReminders(
+              threadId,
+              fullName || `${firstName} ${lastName}`.trim() || null,
+              async () => {
+                const rows = await db.select({ status: leadsTable.status })
+                  .from(leadsTable)
+                  .where(eq(leadsTable.id, leadId))
+                  .limit(1);
+                return rows[0]?.status ?? null;
+              },
+            );
+          }
+        }).catch((err) => console.error("[scout] FB notification error:", err));
       }
 
       // --- Upsert hh_fb_lead_details ---
