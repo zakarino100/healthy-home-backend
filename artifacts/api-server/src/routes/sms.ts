@@ -83,6 +83,54 @@ function detectService(message: string): string | null {
   return null;
 }
 
+function looksLikeName(message: string): boolean {
+  const cleaned = message.trim();
+  if (!cleaned) return false;
+  if (cleaned.length > 40) return false;
+
+  const lower = cleaned.toLowerCase();
+  const disqualifiers = [
+    "price",
+    "quote",
+    "estimate",
+    "how much",
+    "just want",
+    "cost",
+    "clean",
+    "cleaned",
+    "service",
+    "address",
+    "my house",
+    "my gutters",
+    "my driveway",
+    "roof",
+    "gutter",
+    "driveway",
+  ];
+  if (disqualifiers.some(term => lower.includes(term))) return false;
+
+  return /^[a-zA-Z][a-zA-Z\s'\-]{0,38}$/.test(cleaned);
+}
+
+function pricingReplyForService(service: string | undefined): string {
+  if (service === "gutter cleaning") {
+    return "I can help with that. Gutter cleaning pricing depends on the home and how much buildup is there, so I need the property address to give you an accurate quote. What's the address?";
+  }
+  if (service === "driveway cleaning") {
+    return "I can help with that. Driveway pricing depends on the size and condition, so I need the property address to give you an accurate quote. What's the address?";
+  }
+  if (service === "roof wash") {
+    return "I can help with that. Roof wash pricing depends on the size, pitch, and buildup, so I need the property address to give you an accurate quote. What's the address?";
+  }
+  if (service === "house wash") {
+    return "I can help with that. House wash pricing depends on the size and condition of the home, so I need the property address to give you an accurate quote. What's the address?";
+  }
+  if (service === "deck cleaning" || service === "fence cleaning") {
+    return `I can help with that. ${service === "deck cleaning" ? "Deck" : "Fence"} cleaning pricing depends on the size and condition, so I need the property address to give you an accurate quote. What's the address?`;
+  }
+  return "I can help with that. Pricing depends on the property and the service, so I need the address to give you an accurate quote. What's the address?";
+}
+
 async function classifyIntent(message: string): Promise<{ intent: string; source: "keyword" | "ai" | "fallback" }> {
   const keywordIntent = detectKeywordIntent(message);
   if (keywordIntent) return { intent: keywordIntent, source: "keyword" };
@@ -202,6 +250,17 @@ async function continueConversation(
 
   if (conv.intent === "new_customer") {
     if (conv.state === "ask_name") {
+      const lower = body.trim().toLowerCase();
+
+      if (!looksLikeName(body)) {
+        if (QUOTE_KEYWORDS.some(keyword => lower.includes(keyword))) {
+          await sendSms(from, pricingReplyForService(ctx.service));
+        } else {
+          await sendSms(from, "I can help with that. First, what's your name?");
+        }
+        return;
+      }
+
       ctx.name = body.trim();
       await db.update(smsConversationsTable)
         .set({
