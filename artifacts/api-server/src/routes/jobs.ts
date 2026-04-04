@@ -362,11 +362,12 @@ router.put("/:id", async (req, res) => {
 router.post("/:id/complete", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    const completedAt = req.body?.completedAt ? new Date(req.body.completedAt) : new Date();
 
     const [job] = await db.update(jobsTable)
       .set({
         status: "completed",
-        completedAt: new Date(),
+        completedAt,
         satisfactionWorkflowTriggered: true,
         updatedAt: new Date(),
       })

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useListJobs, useCreateJob, useCompleteJob, useListCustomers } from "@workspace/api-client-react";
+import { useListJobs, useCreateJob, useListCustomers } from "@workspace/api-client-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { PageLoader, ErrorState, Card, Button, Badge, Modal, Input, Select, Label } from "@/components/ui-components";
 import { Plus, Check, Calendar, DollarSign, Clock, MessageSquare, MapPin } from "lucide-react";
@@ -32,6 +32,7 @@ export default function JobsPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [schedulingLead, setSchedulingLead] = useState<PendingSale | null>(null);
+  const [completingJob, setCompletingJob] = useState<any | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -48,22 +49,31 @@ export default function JobsPage() {
     },
   });
 
-  const completeMutation = useCompleteJob({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-        toast({ title: "Job marked as completed", description: "Review workflow triggered automatically." });
-      },
-      onError: (err: any) => {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+  const completeMutation = useMutation({
+    mutationFn: async ({ id, completedAt }: { id: number; completedAt?: string }) => {
+      const r = await fetch(`/api/jobs/${id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(completedAt ? { completedAt } : {}),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to complete job");
       }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job marked as completed", description: "Review workflow triggered automatically." });
+      setCompletingJob(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   });
 
-  const handleComplete = (id: number) => {
-    if (confirm("Mark this job as completed? This will trigger the satisfaction workflow.")) {
-      completeMutation.mutate({ id });
-    }
+  const handleComplete = (job: any) => {
+    setCompletingJob(job);
   };
 
   if (isLoading && !jobs) return <PageLoader />;
@@ -249,7 +259,7 @@ export default function JobsPage() {
                 <Button
                   variant="outline"
                   className="w-full mt-2"
-                  onClick={() => handleComplete(job.id)}
+                  onClick={() => handleComplete(job)}
                   isLoading={completeMutation.isPending}
                 >
                   <Check className="w-4 h-4 mr-2 text-emerald-500" />
@@ -277,6 +287,15 @@ export default function JobsPage() {
         <ScheduleModal
           sale={schedulingLead}
           onClose={() => setSchedulingLead(null)}
+        />
+      )}
+
+      {completingJob && (
+        <CompleteJobModal
+          job={completingJob}
+          onClose={() => setCompletingJob(null)}
+          onSubmit={(completedAt) => completeMutation.mutate({ id: completingJob.id, completedAt })}
+          isLoading={completeMutation.isPending}
         />
       )}
 
@@ -392,6 +411,63 @@ function ScheduleModal({ sale, onClose }: { sale: PendingSale; onClose: () => vo
           <Button type="submit" isLoading={scheduleMutation.isPending}>
             <Calendar className="w-4 h-4 mr-2" />
             Confirm Schedule
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function CompleteJobModal({
+  job,
+  onClose,
+  onSubmit,
+  isLoading,
+}: {
+  job: any;
+  onClose: () => void;
+  onSubmit: (completedAt: string) => void;
+  isLoading: boolean;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    onSubmit((fd.get("completedAt") as string) || today);
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Mark Job Complete">
+      <div className="mb-3 p-4 bg-slate-50 rounded-xl space-y-1">
+        <p className="font-bold text-slate-900">
+          {job.customerFirstName
+            ? `${job.customerFirstName} ${job.customerLastName ?? ""}`.trim()
+            : `Customer #${job.customerId}`}
+        </p>
+        {job.customerAddress && (
+          <p className="text-sm text-slate-600">
+            {job.customerAddress}{job.customerCity ? `, ${job.customerCity}` : ""}
+          </p>
+        )}
+        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+          {job.serviceType.replace(/_/g, " ")}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <Label>Service Completion Date</Label>
+          <Input type="date" name="completedAt" defaultValue={today} required />
+          <p className="text-xs text-slate-500 mt-2">
+            Use this when the job was already serviced and you need to backfill the real completion date.
+          </p>
+        </div>
+        <div className="pt-2 flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" isLoading={isLoading}>
+            <Check className="w-4 h-4 mr-2" />
+            Save Completion
           </Button>
         </div>
       </form>
