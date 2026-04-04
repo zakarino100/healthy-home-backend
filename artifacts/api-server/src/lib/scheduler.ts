@@ -1,8 +1,9 @@
 import cron from "node-cron";
 import { buildRobinPayload } from "../routes/reports.js";
 import { db } from "@workspace/db";
-import { dailyReportsTable } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { dailyReportsTable, reviewRequestsTable, customersTable, jobsTable } from "@workspace/db/schema";
+import { eq, lte, sql, and } from "drizzle-orm";
+import { sendSms, normalizePhone } from "../services/twilio.js";
 
 function todayString(): string {
   return new Date().toISOString().split("T")[0];
@@ -90,6 +91,51 @@ export function startScheduler() {
   console.log(`[Scheduler] Daily report scheduled at ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} (cron: ${cronExpression})`);
 
   cron.schedule(cronExpression, runDailyReport, {
-    timezone: "America/Chicago",
+    timezone: "America/New_York",
   });
+
+  // Review SMS — send pending requests at 10 AM ET every day
+  cron.schedule("0 10 * * *", sendPendingReviewSms, {
+    timezone: "America/New_York",
+  });
+  console.log("[Scheduler] Review SMS cron scheduled at 10:00 AM (America/New_York)");
+}
+
+async function sendPendingReviewSms() {
+  console.log("[Scheduler] Sending pending review SMS...");
+  const now = new Date();
+
+  try {
+    const pending = await db
+      .select({
+        req: reviewRequestsTable,
+      })
+      .from(reviewRequestsTable)
+      .where(
+        and(
+          eq(reviewRequestsTable.status, "pending"),
+          lte(reviewRequestsTable.scheduledAt, now),
+        ),
+      );
+
+    let sent = 0;
+    for (const { req } of pending) {
+      if (!req.customerPhone) continue;
+      const normalized = normalizePhone(req.customerPhone);
+      if (!normalized) continue;
+
+      const firstName = req.customerName?.split(" ")[0] ?? "there";
+      const message = `Hey ${firstName}! This is Zak from Healthy Home 🏡 How would you rate your recent service? Reply with a number 1-5 ⭐`;
+      const ok = await sendSms(normalized, message);
+
+      await db.update(reviewRequestsTable)
+        .set({ status: ok ? "sent" : "error", sentAt: new Date(), updatedAt: new Date() })
+        .where(eq(reviewRequestsTable.id, req.id));
+
+      if (ok) sent++;
+    }
+    console.log(`[Scheduler] Review SMS: ${sent}/${pending.length} sent.`);
+  } catch (err) {
+    console.error("[Scheduler] Review SMS cron failed:", err);
+  }
 }

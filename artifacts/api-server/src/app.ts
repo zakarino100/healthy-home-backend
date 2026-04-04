@@ -1,6 +1,7 @@
 import express, { type Express, type Request } from "express";
 import cors from "cors";
 import router from "./routes";
+import feedbackRouter from "./routes/feedback";
 import { startScheduler } from "./lib/scheduler";
 
 const app: Express = express();
@@ -16,6 +17,9 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true }));
+
+// Feedback form — served at /feedback (custom domain: feedback.myhealthyhome.io)
+app.use("/feedback", feedbackRouter);
 
 app.use("/api", router);
 

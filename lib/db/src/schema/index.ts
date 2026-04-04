@@ -11,3 +11,4 @@ export * from "./tasks";
 export * from "./lead-meta";
 export * from "./call-logs";
 export * from "./facebook";
+export * from "./sms";

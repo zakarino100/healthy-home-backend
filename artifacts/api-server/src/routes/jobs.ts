@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import {
   jobsTable,
   reviewWorkflowsTable,
+  reviewRequestsTable,
   jobContentTable,
   customersTable,
   leadsTable,
@@ -10,6 +11,7 @@ import {
   leadMetaTable,
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, isNull, or, ne } from "drizzle-orm";
+import { normalizePhone } from "../services/twilio.js";
 
 const WOLF_PACK_SOURCE = "Wolf Pack Wash leads historical import";
 
@@ -398,6 +400,40 @@ router.post("/:id/complete", async (req, res) => {
         .where(eq(reviewWorkflowsTable.id, existing.id))
         .returning();
       reviewWorkflow = rw;
+    }
+
+    // Schedule review SMS for next day at 10 AM
+    try {
+      const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, job.customerId)).limit(1);
+      if (customer?.phone && !customer.optOut) {
+        const normalized = normalizePhone(customer.phone);
+        if (normalized) {
+          // Check not already scheduled for this job
+          const [existingReq] = await db.select({ id: reviewRequestsTable.id })
+            .from(reviewRequestsTable)
+            .where(eq(reviewRequestsTable.jobId, job.id))
+            .limit(1);
+
+          if (!existingReq) {
+            const scheduledAt = new Date(completedAt);
+            scheduledAt.setDate(scheduledAt.getDate() + 1);
+            scheduledAt.setHours(10, 0, 0, 0);
+
+            const name = [customer.firstName, customer.lastName].filter(Boolean).join(" ");
+            await db.insert(reviewRequestsTable).values({
+              jobId: job.id,
+              customerName: name,
+              customerPhone: normalized,
+              scheduledAt,
+              status: "pending",
+            });
+            console.log(`[jobs/complete] Review SMS scheduled for job ${job.id} at ${scheduledAt.toISOString()}`);
+          }
+        }
+      }
+    } catch (smsErr) {
+      console.error("[jobs/complete] Review SMS scheduling failed:", smsErr);
+      // Non-fatal — job completion still succeeds
     }
 
     res.json({ job, reviewWorkflow });
