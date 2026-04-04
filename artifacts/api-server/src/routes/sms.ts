@@ -131,70 +131,117 @@ function pricingReplyForService(service: string | undefined): string {
   return "I can help with that. Pricing depends on the property and the service, so I need the address to give you an accurate quote. What's the address?";
 }
 
-async function classifyIntent(message: string): Promise<{ intent: string; source: "keyword" | "ai" | "fallback" }> {
-  const keywordIntent = detectKeywordIntent(message);
-  if (keywordIntent) return { intent: keywordIntent, source: "keyword" };
+type ClassificationResult = {
+  intent: string;
+  source: "keyword" | "claude" | "fallback";
+  service?: string | null;
+  replyStyle?: "collect_name" | "collect_address" | "answer_then_collect" | null;
+};
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { intent: "unknown", source: "fallback" };
+async function callClaude(system: string, user: string, maxTokens = 220): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
 
   try {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: 20,
-        messages: [
-          {
-            role: "system",
-            content: `Classify the SMS intent into one of: new_customer, existing_customer, cancellation, payment_inquiry, vendor, unknown.
-Reply with ONLY the intent label, nothing else.
-new_customer = wants a quote or first-time inquiry
-existing_customer = booked customer asking about their appointment
-cancellation = wants to cancel or reschedule
-payment_inquiry = asking about payment, invoice, refund, or charge
-vendor = sales rep, recruiter, or service vendor reaching out
-unknown = anything else`,
-          },
-          { role: "user", content: message },
-        ],
+        model: process.env.ANTHROPIC_MODEL ?? "claude-3-5-sonnet-latest",
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: "user", content: user }],
       }),
     });
 
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.error(`[sms] Claude call failed (${resp.status}): ${text}`);
+      return null;
+    }
+
     const data = await resp.json() as any;
-    const raw = (data.choices?.[0]?.message?.content ?? "unknown").trim().toLowerCase();
-    const valid = ["new_customer", "existing_customer", "cancellation", "payment_inquiry", "vendor", "unknown"];
-    return { intent: valid.includes(raw) ? raw : "unknown", source: "ai" };
+    const text = data?.content?.find((c: any) => c.type === "text")?.text ?? null;
+    return typeof text === "string" ? text.trim() : null;
   } catch (err) {
-    console.error("[sms] Intent classification failed:", err);
-    return { intent: "unknown", source: "fallback" };
+    console.error("[sms] Claude call failed:", err);
+    return null;
+  }
+}
+
+async function classifyIntent(message: string): Promise<ClassificationResult> {
+  const keywordIntent = detectKeywordIntent(message);
+  const keywordService = detectService(message);
+  if (keywordIntent) {
+    return {
+      intent: keywordIntent,
+      source: "keyword",
+      service: keywordService,
+      replyStyle: "collect_name",
+    };
+  }
+
+  const result = await callClaude(
+    `You are Mia's intent classifier for Healthy Home SMS.
+Return strict JSON only.
+Classify the inbound text into one of:
+- new_customer
+- existing_customer
+- cancellation
+- payment_inquiry
+- vendor
+- unknown
+
+Healthy Home services:
+- house wash
+- roof wash
+- driveway cleaning
+- gutter cleaning / downspout cleaning
+- deck cleaning
+- fence cleaning
+
+Extract the most likely service if present.
+Also choose replyStyle from:
+- collect_name
+- collect_address
+- answer_then_collect
+
+Rules:
+- If someone asks for pricing, estimate, quote, or how much for a service, this is usually new_customer.
+- If they already included the property address, replyStyle should usually be collect_name.
+- If they ask a basic service question and are likely a lead, replyStyle can be answer_then_collect.
+- Never include markdown or explanation. Output valid JSON only.`,
+    message,
+    180,
+  );
+
+  if (!result) {
+    return { intent: "unknown", source: "fallback", service: keywordService, replyStyle: null };
+  }
+
+  try {
+    const parsed = JSON.parse(result);
+    const validIntents = ["new_customer", "existing_customer", "cancellation", "payment_inquiry", "vendor", "unknown"];
+    const validReplyStyles = ["collect_name", "collect_address", "answer_then_collect", null];
+    return {
+      intent: validIntents.includes(parsed.intent) ? parsed.intent : "unknown",
+      source: "claude",
+      service: typeof parsed.service === "string" ? parsed.service : keywordService,
+      replyStyle: validReplyStyles.includes(parsed.replyStyle) ? parsed.replyStyle : null,
+    };
+  } catch (err) {
+    console.error("[sms] Claude classification parse failed:", err, result);
+    return { intent: "unknown", source: "fallback", service: keywordService, replyStyle: null };
   }
 }
 
 async function aiReply(userMessage: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
-
-  try {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.35,
-        max_tokens: 160,
-        messages: [
-          {
-            role: "system",
-            content: `You are Mia, the SMS assistant for Healthy Home.
+  const result = await callClaude(
+    `You are Mia, the SMS assistant for Healthy Home.
 Healthy Home offers house washing, roof washing, driveway cleaning, gutter and downspout cleaning, deck cleaning, and fence cleaning.
 Speak like a calm, helpful front desk assistant.
 Keep replies short and natural for SMS.
@@ -210,17 +257,14 @@ If asked about services, answer at a basic but credible level:
 - driveway cleaning = pressure washing / surface cleaning for dirt, algae, grime, and curb appeal
 - gutter cleaning = clearing gutters and downspouts to improve drainage and help prevent overflow
 - deck cleaning = cleaning slippery buildup, grime, and surface discoloration
-- fence cleaning = cleaning wood or vinyl fencing to remove dirt, algae, and discoloration`,
-          },
-          { role: "user", content: userMessage },
-        ],
-      }),
-    });
-    const data = await resp.json() as any;
-    return data.choices?.[0]?.message?.content?.trim() ?? "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
-  } catch {
-    return "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
-  }
+- fence cleaning = cleaning wood or vinyl fencing to remove dirt, algae, and discoloration
+If the customer seems like a lead, move the conversation toward collecting the info needed for a quote.
+Return only the SMS reply text.`,
+    userMessage,
+    140,
+  );
+
+  return result ?? "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
 }
 
 async function notifyScout(content: string) {
@@ -384,8 +428,25 @@ router.post("/inbound", async (req, res) => {
       .limit(1);
 
     if (openConv) {
-      await continueConversation(openConv, normalized, body);
-      return twimlOk(res);
+      const resetIntent = detectKeywordIntent(body);
+      const openCtx = (openConv.context ?? {}) as Record<string, string>;
+      const currentService = openCtx.service ?? detectService(body) ?? undefined;
+      const looksLikeFreshLead = resetIntent === "new_customer" && (
+        openConv.intent !== "new_customer" ||
+        openConv.state === "completed" ||
+        body.toLowerCase().includes("new quote") ||
+        body.toLowerCase().includes("start over") ||
+        (!!currentService && currentService !== openCtx.service)
+      );
+
+      if (!looksLikeFreshLead) {
+        await continueConversation(openConv, normalized, body);
+        return twimlOk(res);
+      }
+
+      await db.update(smsConversationsTable)
+        .set({ status: "completed", updatedAt: new Date() })
+        .where(eq(smsConversationsTable.id, openConv.id));
     }
 
     // 2. Check for pending review request
@@ -436,7 +497,7 @@ router.post("/inbound", async (req, res) => {
     // 3. New inbound — classify and start flow
     const classification = await classifyIntent(body);
     const intent = classification.intent;
-    const service = detectService(body);
+    const service = classification.service ?? detectService(body);
     console.log(`[sms/inbound] from=${normalized} body=${JSON.stringify(body)} intent=${intent} source=${classification.source} service=${service ?? "none"}`);
 
     if (intent === "new_customer") {
@@ -450,7 +511,12 @@ router.post("/inbound", async (req, res) => {
         },
         status: "active",
       });
-      await sendSms(normalized, `Hi, this is Mia with Healthy Home. I can help with that. What's your name?`);
+
+      if (classification.replyStyle === "answer_then_collect") {
+        await sendSms(normalized, `Hi, this is Mia with Healthy Home. I can help with that. Pricing depends on the property and the service, so I’ll ask a couple quick questions to get you pointed the right way. What's your name?`);
+      } else {
+        await sendSms(normalized, `Hi, this is Mia with Healthy Home. I can help with that. What's your name?`);
+      }
 
     } else if (["existing_customer", "cancellation", "payment_inquiry"].includes(intent)) {
       await db.insert(smsConversationsTable).values({
