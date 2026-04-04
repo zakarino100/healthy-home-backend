@@ -15,19 +15,38 @@ import { db } from "@workspace/db";
 import {
   reviewRequestsTable,
   smsConversationsTable,
-  feedbackTable,
   customersTable,
   jobsTable,
+  leadsTable,
 } from "@workspace/db/schema";
-import { eq, and, lte, gte, isNull, or } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { sendSms, normalizePhone } from "../services/twilio.js";
-import { notifyNewLead, scheduleFollowUpReminders } from "../services/scout.js";
-import { leadsTable } from "@workspace/db/schema";
+import { scheduleFollowUpReminders } from "../services/scout.js";
 
 const router: IRouter = Router();
 
 const GOOGLE_REVIEW_URL = "https://g.page/r/CWg6db4vRcotEBM/review";
 const FEEDBACK_BASE_URL = "https://feedback.myhealthyhome.io/feedback";
+const QUOTE_KEYWORDS = [
+  "quote",
+  "estimate",
+  "price",
+  "pricing",
+  "how much",
+  "service",
+  "wash",
+  "cleaning",
+  "driveway",
+  "roof",
+  "gutter",
+  "gutters",
+  "deck",
+  "fence",
+  "house wash",
+  "roof wash",
+  "pressure washing",
+];
+
 
 // ─── Auth middleware (shared token) ──────────────────────────────────────────
 function requireToken(req: any, res: any, next: any) {
@@ -47,9 +66,29 @@ function twimlOk(res: any) {
   res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
 }
 
-async function classifyIntent(message: string): Promise<string> {
+function detectKeywordIntent(message: string): string | null {
+  const lower = message.toLowerCase();
+  if (QUOTE_KEYWORDS.some(keyword => lower.includes(keyword))) return "new_customer";
+  return null;
+}
+
+function detectService(message: string): string | null {
+  const lower = message.toLowerCase();
+  if (lower.includes("roof")) return "roof wash";
+  if (lower.includes("driveway")) return "driveway cleaning";
+  if (lower.includes("gutter") || lower.includes("downspout")) return "gutter cleaning";
+  if (lower.includes("deck")) return "deck cleaning";
+  if (lower.includes("fence")) return "fence cleaning";
+  if (lower.includes("house") || lower.includes("siding") || lower.includes("soft wash") || lower.includes("pressure washing") || lower.includes("wash")) return "house wash";
+  return null;
+}
+
+async function classifyIntent(message: string): Promise<{ intent: string; source: "keyword" | "ai" | "fallback" }> {
+  const keywordIntent = detectKeywordIntent(message);
+  if (keywordIntent) return { intent: keywordIntent, source: "keyword" };
+
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return "unknown";
+  if (!apiKey) return { intent: "unknown", source: "fallback" };
 
   try {
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -69,9 +108,9 @@ async function classifyIntent(message: string): Promise<string> {
 Reply with ONLY the intent label, nothing else.
 new_customer = wants a quote or first-time inquiry
 existing_customer = booked customer asking about their appointment
-cancellation = wants to cancel
-payment_inquiry = asking about payment, invoice, refund
-vendor = sales rep or service vendor reaching out
+cancellation = wants to cancel or reschedule
+payment_inquiry = asking about payment, invoice, refund, or charge
+vendor = sales rep, recruiter, or service vendor reaching out
 unknown = anything else`,
           },
           { role: "user", content: message },
@@ -82,16 +121,16 @@ unknown = anything else`,
     const data = await resp.json() as any;
     const raw = (data.choices?.[0]?.message?.content ?? "unknown").trim().toLowerCase();
     const valid = ["new_customer", "existing_customer", "cancellation", "payment_inquiry", "vendor", "unknown"];
-    return valid.includes(raw) ? raw : "unknown";
+    return { intent: valid.includes(raw) ? raw : "unknown", source: "ai" };
   } catch (err) {
     console.error("[sms] Intent classification failed:", err);
-    return "unknown";
+    return { intent: "unknown", source: "fallback" };
   }
 }
 
 async function aiReply(userMessage: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return "Thanks for reaching out! A team member will be with you shortly.";
+  if (!apiKey) return "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
 
   try {
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -102,23 +141,37 @@ async function aiReply(userMessage: string): Promise<string> {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        temperature: 0.4,
-        max_tokens: 120,
+        temperature: 0.35,
+        max_tokens: 160,
         messages: [
           {
             role: "system",
-            content: `You are a friendly customer service assistant for Healthy Home, an exterior home cleaning company. 
-Keep replies short (1-2 sentences), warm, and professional. 
-If the message is actionable or you can't handle it, end with "A team member will follow up with you shortly!"`,
+            content: `You are Mia, the SMS assistant for Healthy Home.
+Healthy Home offers house washing, roof washing, driveway cleaning, gutter and downspout cleaning, deck cleaning, and fence cleaning.
+Speak like a calm, helpful front desk assistant.
+Keep replies short and natural for SMS.
+Use plain language.
+Maximum 1 emoji per message, and avoid emojis in consecutive messages.
+Most replies should have no emoji.
+Do not sound robotic, cheesy, or overly excited.
+If you are unsure, say a team member will follow up shortly.
+Do not invent pricing, availability, or technical certainty.
+If asked about services, answer at a basic but credible level:
+- house washing = soft washing for siding/exterior surfaces to remove algae, mildew, dirt, and grime
+- roof washing = soft washing for black streaks, algae, and buildup; never describe it as high-pressure roof blasting
+- driveway cleaning = pressure washing / surface cleaning for dirt, algae, grime, and curb appeal
+- gutter cleaning = clearing gutters and downspouts to improve drainage and help prevent overflow
+- deck cleaning = cleaning slippery buildup, grime, and surface discoloration
+- fence cleaning = cleaning wood or vinyl fencing to remove dirt, algae, and discoloration`,
           },
           { role: "user", content: userMessage },
         ],
       }),
     });
     const data = await resp.json() as any;
-    return data.choices?.[0]?.message?.content?.trim() ?? "Thanks for reaching out! A team member will be with you shortly.";
+    return data.choices?.[0]?.message?.content?.trim() ?? "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
   } catch {
-    return "Thanks for reaching out! A team member will be with you shortly.";
+    return "Thanks for reaching out to Healthy Home. A team member will follow up with you shortly.";
   }
 }
 
@@ -151,41 +204,52 @@ async function continueConversation(
     if (conv.state === "ask_name") {
       ctx.name = body.trim();
       await db.update(smsConversationsTable)
+        .set({
+          state: ctx.service ? "ask_address" : "ask_service",
+          context: ctx,
+          updatedAt: new Date(),
+        })
+        .where(eq(smsConversationsTable.id, conv.id));
+      if (ctx.service) {
+        await sendSms(from, `Nice to meet you, ${ctx.name}. What's the address for the property?`);
+      } else {
+        await sendSms(from, `Nice to meet you, ${ctx.name}. Which service are you looking for? We handle house wash, roof wash, driveway cleaning, gutter cleaning, deck cleaning, and fence cleaning.`);
+      }
+
+    } else if (conv.state === "ask_service") {
+      ctx.service = detectService(body) ?? body.trim();
+      await db.update(smsConversationsTable)
         .set({ state: "ask_address", context: ctx, updatedAt: new Date() })
         .where(eq(smsConversationsTable.id, conv.id));
-      await sendSms(from, `Nice to meet you, ${ctx.name}! 🏡 What's the address we'd be cleaning?`);
+      await sendSms(from, `Got it. What's the address for the property?`);
 
     } else if (conv.state === "ask_address") {
       ctx.address = body.trim();
       await db.update(smsConversationsTable)
         .set({ state: "ask_last_service", context: ctx, updatedAt: new Date() })
         .where(eq(smsConversationsTable.id, conv.id));
-      await sendSms(from, `Got it! When was the last time the exterior was cleaned? (Or is this the first time?)`);
+      await sendSms(from, `Got it. When was the last time it was cleaned, or is this the first time?`);
 
     } else if (conv.state === "ask_last_service") {
       ctx.lastService = body.trim();
       await db.update(smsConversationsTable)
         .set({ state: "completed", status: "completed", context: ctx, updatedAt: new Date() })
         .where(eq(smsConversationsTable.id, conv.id));
-      await sendSms(from, `Perfect — we'll get you a quote shortly! Someone from our team will follow up soon 👍`);
+      await sendSms(from, `Perfect — we'll get you a quote shortly. Someone from our team will follow up soon.`);
 
-      // Create lead in CRM
-      const nameParts = (ctx.name ?? "").split(" ");
-      const firstName = nameParts[0] ?? "Unknown";
-      const lastName  = nameParts.slice(1).join(" ") ?? "";
       const [lead] = await db.insert(leadsTable).values({
         homeownerName: ctx.name ?? "Unknown",
         phone: from,
         addressLine1: ctx.address ?? "",
         source: "sms_inbound",
         businessUnit: "Healthy Home",
+        servicesInterested: ctx.service ? [ctx.service] : null,
         status: "new",
-        createdBy: "sms_agent",
+        createdBy: "mia_sms_agent",
       }).returning();
 
-      // Scout notification
       await notifyScout(
-        `📱 **SMS Lead** — ${ctx.name ?? "Unknown"}\n📞 ${from}\n🏠 ${ctx.address ?? "—"}\n🧹 Last cleaned: ${ctx.lastService ?? "—"}\n🔗 <https://healthy-home-backend.replit.app/leads/${lead.id}>`
+        `📱 **SMS Lead** — ${ctx.name ?? "Unknown"}\n📞 ${from}\n🏠 ${ctx.address ?? "—"}\n🧰 Service: ${ctx.service ?? "—"}\n🧹 Last cleaned: ${ctx.lastService ?? "—"}\n🔗 <https://healthy-home-backend.replit.app/leads/${lead.id}>`
       );
       scheduleFollowUpReminders(
         process.env.DISCORD_LEADS_CHANNEL_ID ?? "",
@@ -206,7 +270,7 @@ async function continueConversation(
       await db.update(smsConversationsTable)
         .set({ state: "completed", status: "completed", context: ctx, updatedAt: new Date() })
         .where(eq(smsConversationsTable.id, conv.id));
-      await sendSms(from, `Thanks ${ctx.name} — we'll have someone reach out to you shortly! 👍`);
+      await sendSms(from, `Thanks ${ctx.name}. We'll have someone reach out to you shortly.`);
 
       const intentLabel =
         conv.intent === "cancellation"     ? "🚫 Cancellation Request"
@@ -227,7 +291,7 @@ async function continueConversation(
       await db.update(smsConversationsTable)
         .set({ state: "completed", status: "completed", context: ctx, updatedAt: new Date() })
         .where(eq(smsConversationsTable.id, conv.id));
-      await sendSms(from, `Got it — we'll pass this along to our team. Thanks!`);
+      await sendSms(from, `Got it — we'll pass this along to our team.`);
       await notifyScout(
         `📱 **Vendor/Sales SMS**\n📞 ${from}\n💬 "${ctx.originalMessage ?? "—"}"\nℹ️ Follow-up: "${ctx.vendorInfo}"`
       );
@@ -311,17 +375,23 @@ router.post("/inbound", async (req, res) => {
     }
 
     // 3. New inbound — classify and start flow
-    const intent = await classifyIntent(body);
+    const classification = await classifyIntent(body);
+    const intent = classification.intent;
+    const service = detectService(body);
+    console.log(`[sms/inbound] from=${normalized} body=${JSON.stringify(body)} intent=${intent} source=${classification.source} service=${service ?? "none"}`);
 
     if (intent === "new_customer") {
       await db.insert(smsConversationsTable).values({
         phone: normalized,
         intent,
         state: "ask_name",
-        context: { originalMessage: body },
+        context: {
+          originalMessage: body,
+          ...(service ? { service } : {}),
+        },
         status: "active",
       });
-      await sendSms(normalized, `Hey! Thanks for reaching out to Healthy Home 🏡 I'd love to get you a quote. What's your name?`);
+      await sendSms(normalized, `Hi, this is Mia with Healthy Home. I can help with that. What's your name?`);
 
     } else if (["existing_customer", "cancellation", "payment_inquiry"].includes(intent)) {
       await db.insert(smsConversationsTable).values({
@@ -331,7 +401,7 @@ router.post("/inbound", async (req, res) => {
         context: { originalMessage: body },
         status: "active",
       });
-      await sendSms(normalized, `Got it! Let me get someone from our team to help you with that. What's your name so we can pull up your account?`);
+      await sendSms(normalized, `Got it. What's your name so we can pull up your account?`);
 
     } else if (intent === "vendor") {
       await db.insert(smsConversationsTable).values({
@@ -341,13 +411,11 @@ router.post("/inbound", async (req, res) => {
         context: { originalMessage: body },
         status: "active",
       });
-      await sendSms(normalized, `Thanks for reaching out! What's your name and company, and what can we help you with?`);
+      await sendSms(normalized, `Thanks for reaching out. What's your name and company, and what can we help you with?`);
 
     } else {
-      // unknown — AI handles it
       const reply = await aiReply(body);
       await sendSms(normalized, reply);
-      // Log to Scout if potentially actionable
       await notifyScout(
         `📱 **Unknown SMS** — ${normalized}\n💬 "${body}"\n🤖 Replied: "${reply}"`
       );
