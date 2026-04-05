@@ -12,6 +12,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, gte, lte, sql, isNull, or, ne } from "drizzle-orm";
 import { normalizePhone } from "../services/twilio.js";
+import { isReviewAutoSendEnabled } from "./reviews.js";
 
 const WOLF_PACK_SOURCE = "Wolf Pack Wash leads historical import";
 
@@ -402,10 +403,10 @@ router.post("/:id/complete", async (req, res) => {
       reviewWorkflow = rw;
     }
 
-    // Schedule review SMS for next day at 10 AM
+    // Schedule review SMS for next day at 10 AM (only if auto-send is enabled)
     try {
       const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, job.customerId)).limit(1);
-      if (customer?.phone && !customer.optOut) {
+      if (isReviewAutoSendEnabled() && customer?.phone && !customer.optOut) {
         const normalized = normalizePhone(customer.phone);
         if (normalized) {
           // Check not already scheduled for this job

@@ -26,6 +26,11 @@ import { scheduleFollowUpReminders } from "../services/scout.js";
 const router: IRouter = Router();
 
 const GOOGLE_REVIEW_URL = "https://g.page/r/CWg6db4vRcotEBM/review";
+const BACKEND_URL = process.env.BACKEND_PUBLIC_URL ?? "https://healthy-home-backend.replit.app";
+
+function reviewTrackingUrl(reviewRequestId: number): string {
+  return `${BACKEND_URL}/api/reviews/received?token=${reviewRequestId}`;
+}
 const FEEDBACK_BASE_URL = "https://feedback.myhealthyhome.io/feedback";
 const QUOTE_KEYWORDS = [
   "quote",
@@ -467,9 +472,10 @@ router.post("/inbound", async (req, res) => {
           await db.update(reviewRequestsTable)
             .set({ response: body, responseAt: now, status: "responded_positive", updatedAt: now })
             .where(eq(reviewRequestsTable.id, reviewReq.id));
+          const trackingUrl = reviewTrackingUrl(reviewReq.id);
           await sendSms(
             normalized,
-            `That's amazing, thank you! 🙏 Would you mind leaving us a quick Google review? It takes 30 seconds and means everything to us: ${GOOGLE_REVIEW_URL}`,
+            `That's amazing, thank you! 🙏 Would you mind leaving us a quick Google review? It takes 30 seconds and means everything to us: ${trackingUrl}`,
           );
         } else {
           await db.update(reviewRequestsTable)
