@@ -29,6 +29,17 @@ async function notifyScout(content: string) {
 
 // ─── GET /feedback ────────────────────────────────────────────────────────────
 
+// GET /feedback/list — dashboard data endpoint
+router.get("/list", async (_req, res) => {
+  try {
+    const rows = await db.select().from(feedbackTable).orderBy(feedbackTable.submittedAt);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/", (req, res) => {
   const name   = (req.query.name   as string) ?? "";
   const phone  = (req.query.phone  as string) ?? "";

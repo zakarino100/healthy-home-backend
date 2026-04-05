@@ -14,6 +14,7 @@ import phoneRouter from "./phone";
 import formRouter from "./form";
 import facebookRouter from "./facebook";
 import smsRouter from "./sms";
+import feedbackRouter from "./feedback";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use("/phone", phoneRouter);
 router.use("/form", formRouter);
 router.use("/facebook", facebookRouter);
 router.use("/sms", smsRouter);
+router.use("/feedback", feedbackRouter);
 
 export default router;

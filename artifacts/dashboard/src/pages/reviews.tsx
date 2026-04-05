@@ -1,11 +1,88 @@
 import { useState, useEffect } from "react";
 import { useListReviewWorkflows, useRecordSatisfaction, useResolveIssue } from "@workspace/api-client-react";
 import { PageLoader, ErrorState, Card, Button, Badge, Modal, Label } from "@/components/ui-components";
-import { Star, AlertCircle, MessageSquareText, CheckCircle2, ToggleLeft, ToggleRight, CalendarRange, Send } from "lucide-react";
+import { Star, AlertCircle, MessageSquareText, CheckCircle2, ToggleLeft, ToggleRight, CalendarRange, Send, MessageCircleWarning, Phone } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
+
+// ─── Feedback tab ─────────────────────────────────────────────────────────────
+
+type FeedbackRow = {
+  id: number;
+  customerName: string | null;
+  customerPhone: string | null;
+  rating: number | null;
+  feedbackText: string | null;
+  contactOk: boolean | null;
+  submittedAt: string;
+};
+
+function useFeedback() {
+  const [data, setData] = useState<FeedbackRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/feedback/list`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  return { data, loading };
+}
+
+function FeedbackTab() {
+  const { data, loading } = useFeedback();
+
+  if (loading) return <PageLoader />;
+
+  if (!data?.length) {
+    return (
+      <div className="py-16 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
+        <MessageCircleWarning className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="font-medium">No feedback submissions yet.</p>
+        <p className="text-sm mt-1">1-4 star responses will appear here.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      {data.map(f => (
+        <Card key={f.id} className="!p-4 sm:!p-6 border-l-4 border-l-amber-400">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="font-bold text-slate-900">{f.customerName ?? "Unknown"}</span>
+            {f.rating && (
+              <div className="flex text-amber-400">
+                {[1,2,3,4,5].map(s => (
+                  <Star key={s} className={`w-4 h-4 ${s <= f.rating! ? 'fill-current' : 'text-slate-200 fill-slate-200'}`} />
+                ))}
+              </div>
+            )}
+            {f.contactOk && (
+              <Badge variant="default" className="flex items-center gap-1">
+                <Phone className="w-3 h-3" /> Wants follow-up
+              </Badge>
+            )}
+          </div>
+          {f.customerPhone && (
+            <p className="text-sm text-slate-500 mb-2">📞 {f.customerPhone}</p>
+          )}
+          {f.feedbackText && (
+            <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">
+              "{f.feedbackText}"
+            </p>
+          )}
+          <p className="text-xs text-slate-400 mt-2">
+            {new Date(f.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 // ─── Auto-send toggle ─────────────────────────────────────────────────────────
 
@@ -141,6 +218,7 @@ export default function ReviewsPage() {
   const { data: workflows, isLoading, error } = useListReviewWorkflows();
   const [selectedWorkflow, setSelectedWorkflow] = useState<number | null>(null);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"satisfaction" | "feedback">("satisfaction");
   const { enabled: autoSendEnabled, toggle: toggleAutoSend } = useAutoSend();
 
   const queryClient = useQueryClient();
@@ -196,9 +274,34 @@ export default function ReviewsPage() {
       {/* Batch trigger */}
       <BatchTriggerPanel />
 
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-slate-200">
+        <button
+          onClick={() => setActiveTab("satisfaction")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "satisfaction"
+              ? "border-primary text-primary"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          Satisfaction Requests
+        </button>
+        <button
+          onClick={() => setActiveTab("feedback")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "feedback"
+              ? "border-primary text-primary"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          Feedback Forms
+        </button>
+      </div>
+
+      {activeTab === "feedback" && <FeedbackTab />}
+
       {/* Workflow list */}
-      <div>
-        <h3 className="font-bold text-lg text-slate-900 mb-3">Workflow Log</h3>
+      {activeTab === "satisfaction" && <div>
         <div className="space-y-3 sm:space-y-4">
           {workflows?.map((w) => (
             <Card
@@ -285,7 +388,7 @@ export default function ReviewsPage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       <ResolveIssueModal
         isOpen={isResolveModalOpen}
