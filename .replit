@@ -1,5 +1,5 @@
 modules = ["nodejs-24", "postgresql-16"]
-run = "pnpm --filter @workspace/api-server build && PORT=8080 node artifacts/api-server/dist/index.cjs"
+run = "pnpm --filter @workspace/api-server build && node artifacts/api-server/dist/index.cjs"
 
 [[artifacts]]
 id = "artifacts/api-server"
